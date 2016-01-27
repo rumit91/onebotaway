@@ -25,6 +25,7 @@ interface BusCommandDefinitionRule {
 interface BusCommandInfo {
     busStopName: string;
     routeName: string;
+    lookupSpanInMin: number; // look for arrivals from (now) to (now + X min)
     arrivals: {
         predicted: Date;
         scheduled: Date;
@@ -67,6 +68,7 @@ interface OneBusAwayArrivalsAndDepartures {
 }
 
 class OneBotAwayBot {
+    private _oneBusAway: OneBusAwayClient;
     private _controller;
     private _bot;
     private _interval;
@@ -75,22 +77,20 @@ class OneBotAwayBot {
             // home stop
             startTime: 0, // midnight
             endTime: 39600000, // 11am
-            stop: '1_13460',
-            route: '40_100236'
+            stop: '1_13460', // Bellevue Ave & E Olive St
+            route: '40_100236' //545
         },
-            {
-                // work stop
-                startTime: 39601000, // 11:00:01 AM
-                endTime: 86399000, // 11:59:59 PM
-                stop: '1_13460',
-                route: '40_100236'
-            }]
+        {
+            // work stop
+            startTime: 39601000, // 11:00:01 AM
+            endTime: 86399000, // 11:59:59 PM
+            stop: '1_71334', // Overlake TC - Bay 4
+            route: '40_100236' //545
+        }]
     }
-    private _oneBusAwayKey: string;
-    private _oneBusAwayBaseUrl = 'http://api.pugetsound.onebusaway.org/api/where/';
 
-    constructor(oneBusAwayKey: string, slackToken: string) {
-        this._oneBusAwayKey = oneBusAwayKey;
+    constructor(oneBusAway: OneBusAwayClient, slackToken: string) {
+        this._oneBusAway = oneBusAway;
         // Create a controller.
         this._controller = Botkit.slackbot({
             debug: true
@@ -121,45 +121,51 @@ class OneBotAwayBot {
         });
 
         this._controller.hears(['bus'], ['direct_message'], (bot, message) => {
-            bot.reply(message, 'Let me check...');
-
-            _.each(this._busCommandDefinition.rules, rule => {
-                if (this._fitsRuleInterval(rule, new Date())) {
-                    var info: BusCommandInfo = {
-                        busStopName: '',
-                        routeName: '',
-                        arrivals: []
-                    }
-                    this._getStopInfo(rule.stop).then<any>(res => {
-                        info.busStopName = (JSON.parse(res[0].body) as OneBusAwayStop).data.entry.name;
-                        return this._getRouteInfo(rule.route);
-                    }).then<any>(res => {
-                        info.routeName = (JSON.parse(res[0].body) as OneBusAwayRoute).data.entry.shortName;
-                        return this._getArrivalInfo(rule.stop);
-                    }).then<any>(res => {
-                        let arrivals = (JSON.parse(res[0].body) as OneBusAwayArrivalsAndDepartures).data.entry.arrivalsAndDepartures;
-                        arrivals = _.filter(arrivals, arrival => {
-                            return arrival.routeId === rule.route && arrival.predictedArrivalTime > new Date().getTime();
-                        });
-                        _.each(arrivals, arrival => {
-                            info.arrivals.push({
-                                predicted: new Date(arrival.predictedArrivalTime),
-                                scheduled: new Date(arrival.scheduledArrivalTime)
-                            });
-                        });
-                        bot.reply(message, this._getBotCommandReplyString(info));
-                    }).fail(err => {
-                        console.log(err);
-                    });
+            this._respondToBotCommand(bot, message);
+        });
+    }
+    
+    private _respondToBotCommand(bot, message) {
+        _.each(this._busCommandDefinition.rules, rule => {
+            if (this._fitsRuleInterval(rule, new Date())) {
+                let info: BusCommandInfo = {
+                    busStopName: '',
+                    routeName: '',
+                    lookupSpanInMin: 100,
+                    arrivals: []
                 }
-            });
+                
+                this._oneBusAway.getStopInfo(rule.stop).then<any>(res => {
+                    info.busStopName = (JSON.parse(res[0].body) as OneBusAwayStop).data.entry.name;
+                    return this._oneBusAway.getRouteInfo(rule.route);
+                }).then<any>(res => {
+                    info.routeName = (JSON.parse(res[0].body) as OneBusAwayRoute).data.entry.shortName;
+                    return this._oneBusAway.getArrivalInfo(rule.stop, info.lookupSpanInMin);
+                }).then<any>(res => {
+                    let arrivals = (JSON.parse(res[0].body) as OneBusAwayArrivalsAndDepartures).data.entry.arrivalsAndDepartures;
+                    // Filter out routes we don't care about and busses that have already left
+                    arrivals = _.filter(arrivals, arrival => {
+                        return arrival.routeId === rule.route && arrival.predictedArrivalTime > new Date().getTime();
+                    });
+                    _.each(arrivals, arrival => {
+                        info.arrivals.push({
+                            predicted: new Date(arrival.predictedArrivalTime),
+                            scheduled: new Date(arrival.scheduledArrivalTime)
+                        });
+                    });
+                    bot.reply(message, this._getBotCommandReplyString(info));
+                }).fail(err => {
+                    console.log(err)
+                    bot.reply(message, JSON.stringify(err));
+                });
+            }
         });
     }
 
     private _getBotCommandReplyString(info: BusCommandInfo) {
-        let replyString = ':bus: `' + info.routeName + '` arrivals at :busstop:`' + info.busStopName + '`\n';
+        let replyString = ':bus: `' + info.routeName + '` at :busstop:`' + info.busStopName + '`\n';
         if (info.arrivals.length === 0) {
-            return replyString + 'No arrivals in the next 60 min';
+            return replyString + 'No arrivals in the next ' + info.lookupSpanInMin + ' min';
         } else {
             let now = new Date();
             _.each(info.arrivals, arrival => {
@@ -182,20 +188,29 @@ class OneBotAwayBot {
     private _fitsRuleInterval(rule: BusCommandDefinitionRule, dateTime: Date): boolean {
         //Subtract the date to get just the time in milliseconds
         let time = dateTime.getTime() - Date.parse(dateTime.toDateString());
-        console.log(time > rule.startTime && time < rule.endTime);
+        //console.log(time > rule.startTime && time < rule.endTime);
         return time > rule.startTime && time < rule.endTime;
-    }
+    }    
+}
 
-    private _getStopInfo(stop: string) {
+class OneBusAwayClient {
+    private _oneBusAwayKey: string;
+    private _oneBusAwayBaseUrl = 'http://api.pugetsound.onebusaway.org/api/where/';
+    
+    constructor(oneBusAwayKey: string) {
+        this._oneBusAwayKey = oneBusAwayKey;
+    }
+    
+    public getStopInfo(stop: string) {
         return Q.nfcall<any>(request, this._getOneBusAwayStopUrl(stop));
     }
 
-    private _getRouteInfo(route: string) {
+    public getRouteInfo(route: string) {
         return Q.nfcall<any>(request, this._getOneBusAwayRouteUrl(route));
     }
 
-    private _getArrivalInfo(stop: string) {
-        return Q.nfcall<any>(request, this._getOneBusAwayArrivalsAndDeparturesUrl(stop));
+    public getArrivalInfo(stop: string, minutesAfter: number) {
+        return Q.nfcall<any>(request, this._getOneBusAwayArrivalsAndDeparturesUrl(stop, minutesAfter));
     }
 
     private _getOneBusAwayStopUrl(stopNumber: string): string {
@@ -206,11 +221,11 @@ class OneBotAwayBot {
         return this._oneBusAwayBaseUrl + 'route/' + routeNumber + '.json?key=' + this._oneBusAwayKey;
     }
 
-    private _getOneBusAwayArrivalsAndDeparturesUrl(stopNumber: string): string {
+    private _getOneBusAwayArrivalsAndDeparturesUrl(stopNumber: string, minutesAfter: number): string {
         return this._oneBusAwayBaseUrl + 'arrivals-and-departures-for-stop/' + stopNumber 
-            + '.json?key=' + this._oneBusAwayKey + '&minutesAfter=60';
+            + '.json?key=' + this._oneBusAwayKey + '&minutesAfter=' + minutesAfter;
     }
 }
 
-var bot = new OneBotAwayBot(ONE_BUS_AWAY_KEY, SLACK_TOKEN);
+var bot = new OneBotAwayBot(new OneBusAwayClient(ONE_BUS_AWAY_KEY), SLACK_TOKEN);
 bot.start();

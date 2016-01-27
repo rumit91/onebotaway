@@ -41,3 +41,6 @@ deploy
 
 # typescript typings
 typings
+
+# IDE folder
+.vscode
