@@ -22,7 +22,7 @@ interface BusCommandDefinitionRule {
     route: string;
 }
 
-interface BusCommandInfo {
+interface BusArrivalsInfo {
     busStopName: string;
     routeName: string;
     lookupSpanInMin: number; // look for arrivals from (now) to (now + X min)
@@ -127,42 +127,45 @@ class OneBotAwayBot {
     
     private _respondToBotCommand(bot, message) {
         _.each(this._busCommandDefinition.rules, rule => {
-            if (this._fitsRuleInterval(rule, new Date())) {
-                let info: BusCommandInfo = {
-                    busStopName: '',
-                    routeName: '',
-                    lookupSpanInMin: 100,
-                    arrivals: []
-                }
-                
-                this._oneBusAway.getStopInfo(rule.stop).then<any>(res => {
-                    info.busStopName = (JSON.parse(res[0].body) as OneBusAwayStop).data.entry.name;
-                    return this._oneBusAway.getRouteInfo(rule.route);
-                }).then<any>(res => {
-                    info.routeName = (JSON.parse(res[0].body) as OneBusAwayRoute).data.entry.shortName;
-                    return this._oneBusAway.getArrivalInfo(rule.stop, info.lookupSpanInMin);
-                }).then<any>(res => {
-                    let arrivals = (JSON.parse(res[0].body) as OneBusAwayArrivalsAndDepartures).data.entry.arrivalsAndDepartures;
-                    // Filter out routes we don't care about and busses that have already left
-                    arrivals = _.filter(arrivals, arrival => {
-                        return arrival.routeId === rule.route && arrival.predictedArrivalTime > new Date().getTime();
-                    });
-                    _.each(arrivals, arrival => {
-                        info.arrivals.push({
-                            predicted: new Date(arrival.predictedArrivalTime),
-                            scheduled: new Date(arrival.scheduledArrivalTime)
-                        });
-                    });
+            if (this._fitsBusCommandRuleInterval(rule, new Date())) {                
+                this._getBusArrivalsInfo(rule.stop, rule.route, 100).then(info => {
                     bot.reply(message, this._getBotCommandReplyString(info));
-                }).fail(err => {
-                    console.log(err)
-                    bot.reply(message, JSON.stringify(err));
                 });
             }
         });
     }
+    
+    private _getBusArrivalsInfo(stop: string, route: string, lookUpSpanInMin: number): Q.Promise<BusArrivalsInfo> {
+        let info: BusArrivalsInfo = {
+            busStopName: '',
+            routeName: '',
+            lookupSpanInMin: lookUpSpanInMin,
+            arrivals: []
+        };
+        
+        return this._oneBusAway.getStopInfo(stop).then<any>(res => {
+            info.busStopName = (JSON.parse(res[0].body) as OneBusAwayStop).data.entry.name;
+            return this._oneBusAway.getRouteInfo(route);
+        }).then<any>(res => {
+            info.routeName = (JSON.parse(res[0].body) as OneBusAwayRoute).data.entry.shortName;
+            return this._oneBusAway.getArrivalInfo(stop, lookUpSpanInMin);
+        }).then<any>(res => {
+            let arrivals = (JSON.parse(res[0].body) as OneBusAwayArrivalsAndDepartures).data.entry.arrivalsAndDepartures;
+            // Filter out routes we don't care about and busses that have already left
+            arrivals = _.filter(arrivals, arrival => {
+                return arrival.routeId === route && arrival.predictedArrivalTime > new Date().getTime();
+            });
+            _.each(arrivals, arrival => {
+                info.arrivals.push({
+                    predicted: new Date(arrival.predictedArrivalTime),
+                    scheduled: new Date(arrival.scheduledArrivalTime)
+                });
+            });
+            return info;
+        });
+    }
 
-    private _getBotCommandReplyString(info: BusCommandInfo) {
+    private _getBotCommandReplyString(info: BusArrivalsInfo) {
         let replyString = ':bus: `' + info.routeName + '` at :busstop:`' + info.busStopName + '`\n';
         if (info.arrivals.length === 0) {
             return replyString + 'No arrivals in the next ' + info.lookupSpanInMin + ' min';
@@ -185,12 +188,12 @@ class OneBotAwayBot {
         return replyString;
     }
 
-    private _fitsRuleInterval(rule: BusCommandDefinitionRule, dateTime: Date): boolean {
+    private _fitsBusCommandRuleInterval(rule: BusCommandDefinitionRule, dateTime: Date): boolean {
         //Subtract the date to get just the time in milliseconds
         let time = dateTime.getTime() - Date.parse(dateTime.toDateString());
         //console.log(time > rule.startTime && time < rule.endTime);
         return time > rule.startTime && time < rule.endTime;
-    }    
+    }   
 }
 
 class OneBusAwayClient {
