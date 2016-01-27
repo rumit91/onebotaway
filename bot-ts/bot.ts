@@ -1,7 +1,10 @@
-var Botkit = require('botkit');
-var request = require('request');
-var fs = require('fs');
-var nconf = require('nconf');
+/// <reference path="../typings/tsd.d.ts" />
+/// <reference path="./custom-typings/botkit.d.ts" />
+
+import Botkit = require('botkit');
+import request = require('request');
+import fs = require('fs');
+import nconf = require('nconf');
 
 nconf.file({ file: './config.json'});
 
@@ -21,13 +24,13 @@ controller.spawn({
     }
 });
 
-controller.hears(['nvm'],['direct_message'],function(bot,message) {
+controller.hears(['nvm'],['direct_message'],function(bot, message) {
     if (interval) {
         clearInterval(interval);
     }
 });
 
-controller.hears(['bus'],['direct_message'],function(bot,message) {
+controller.hears(['bus'],['direct_message'],function(bot, message) {
     bot.reply(message, 'Let me check...');
     var oneBusAwayUrl = 'http://api.pugetsound.onebusaway.org/api/where/arrivals-and-departures-for-stop/' 
         + '1_71334.json?key=' 
@@ -37,7 +40,7 @@ controller.hears(['bus'],['direct_message'],function(bot,message) {
     interval = setInterval(sayNextArrival.bind(this, message, bot, oneBusAwayUrl), 5000);
 });
 
-sayNextArrival = function(message, bot, url) {
+var sayNextArrival = function(message, bot, url) {
     request(url, function (error, response, body) {
         if (!error && response.statusCode == 200) {
             var stopInfo = JSON.parse(body);

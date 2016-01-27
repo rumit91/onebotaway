@@ -8,7 +8,13 @@
     "nconf": "^0.8.2",
     "request": "^2.67.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "gulp": "^3.9.0",
+    "gulp-tslint": "^4.3.1", 
+    "gulp-typescript": "^2.10.0",
+    "tslint": "^3.3.0",
+    "tsd": "^0.6.5"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rumit91/onebotaway.git"

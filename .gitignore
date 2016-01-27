@@ -34,3 +34,9 @@ node_modules
 
 # Config file holding all the API keys.
 config.json
+
+# js output folder
+bot-js
+
+# typescript typings
+typings
