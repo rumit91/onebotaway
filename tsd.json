@@ -16,6 +16,9 @@
     },
     "form-data/form-data.d.ts": {
       "commit": "7ce80dafc0df189d61950e80e04548d8304d1538"
+    },
+    "lodash/lodash.d.ts": {
+      "commit": "7ce80dafc0df189d61950e80e04548d8304d1538"
     }
   }
 }
