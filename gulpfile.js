@@ -15,12 +15,8 @@ gulp.task('ts-compile', function() {
   .pipe(ts({module: 'commonjs'})).js.pipe(gulp.dest(jsOutput));
 });
 
-gulp.task('copy-config', function() {
-    return gulp.src('./bot-ts/config.json').pipe(gulp.dest(jsOutput));
-});
-
 gulp.task('watch', function() {
     gulp.watch([allTypescript], ['ts-lint', 'ts-compile']);
 });
 
-gulp.task('default', ['ts-lint', 'ts-compile', 'copy-config', 'watch']);
+gulp.task('default', ['ts-lint', 'ts-compile', 'watch']);
