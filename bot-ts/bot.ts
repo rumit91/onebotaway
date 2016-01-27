@@ -7,6 +7,7 @@ import fs = require('fs');
 import nconf = require('nconf');
 import _ = require('lodash');
 import Q = require('q');
+import schedule = require('node-schedule');
 
 nconf.file({ file: './config.json' });
 var ONE_BUS_AWAY_KEY = nconf.get('ONE_BUS_AWAY');
@@ -30,6 +31,22 @@ interface BusArrivalsInfo {
         predicted: Date;
         scheduled: Date;
     }[];
+}
+
+interface NotificationSchedule {
+    stop: string;
+    route: string;
+    notificationsStartTime: {
+        hour: number;
+        //min: number; // Commenting out for now since it doesn't work well with Chron
+    };
+    notificationsEndTime: {
+        hour: number;
+        //min: number; // Commenting out for now since it doesn't work well with Chron
+    };
+    notifyOn: number[];
+    minBetweenNotifications: number;
+    travelTimeToStopInMin: number;
 }
 
 interface OneBusAwayStop {
@@ -88,6 +105,57 @@ class OneBotAwayBot {
             route: '40_100236' //545
         }]
     }
+    private _scheduledJobs: schedule.Job[] = [];
+    private _notificationSchedules: NotificationSchedule[] = [
+        /*
+        {
+            // Test Schedule
+            stop: '1_13460', // Bellevue Ave & E Olive St
+            route: '40_100236', //545
+            notificationsStartTime: {
+                hour: 13,
+                //min: 27,
+            },
+            notificationsEndTime: {
+                hour: 16,
+                //min: 0,
+            },
+            notifyOn: [1,2,3,4,5],
+            minBetweenNotifications: 1,
+            travelTimeToStopInMin: 5
+        },
+        */
+        {
+            stop: '1_13460', // Bellevue Ave & E Olive St
+            route: '40_100236', //545
+            notificationsStartTime: {
+                hour: 7,
+                //min: 30,
+            },
+            notificationsEndTime: {
+                hour: 10,
+                //min: 0,
+            },
+            notifyOn: [1,2,3,4,5],
+            minBetweenNotifications: 10,
+            travelTimeToStopInMin: 5
+        },
+        {
+            stop: '1_71334', // Overlake TC - Bay 4
+            route: '40_100236', //545
+            notificationsStartTime: {
+                hour: 17,
+                //min: 30,
+            },
+            notificationsEndTime: {
+                hour: 20,
+                //min: 0,
+            },
+            notifyOn: [1,2,3,4,5],
+            minBetweenNotifications: 15,
+            travelTimeToStopInMin: 12
+        },
+    ]
 
     constructor(oneBusAway: OneBusAwayClient, slackToken: string) {
         this._oneBusAway = oneBusAway;
@@ -102,6 +170,7 @@ class OneBotAwayBot {
         });
 
         this._setUpListeningCommands();
+        this._setUpNotificationSchedule();
     }
 
     start() {
@@ -194,6 +263,58 @@ class OneBotAwayBot {
         //console.log(time > rule.startTime && time < rule.endTime);
         return time > rule.startTime && time < rule.endTime;
     }   
+    
+    private _setUpNotificationSchedule() {
+        _.each(this._notificationSchedules, notifySchedule => {
+            const cronString = this._getCronStringForNotificationSchedule(notifySchedule);
+            this._scheduledJobs.push(schedule.scheduleJob(cronString, () => {
+                this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100).then(info => {
+                     this._bot.say({
+                        text: this._getBotCommandReplyString(info),
+                        channel: 'D0KCKR12A'
+                     });
+                });
+            }));
+        });
+    }
+    
+    private _getCronStringForNotificationSchedule(notifySchedule: NotificationSchedule): string {
+        let cronString = '0 ';
+            
+        // Cron Min
+        let cronMin = [];
+        let tempMin = 0;
+        while (tempMin < 60) {
+            cronMin.push(tempMin);
+            tempMin += notifySchedule.minBetweenNotifications;
+        }
+        cronString += cronMin.join(',') + ' ';
+            
+        // Cron Hour
+        let cronHour = [];
+        let tempHour = notifySchedule.notificationsStartTime.hour;
+        while (tempHour < notifySchedule.notificationsEndTime.hour) {
+            cronHour.push(tempHour);
+            tempHour++;
+        }
+        if (cronHour.length < 1) {
+            cronHour.push(tempHour);
+        }
+        cronString += cronHour.join(',') + ' ';
+            
+        //Cron Day of Month
+        cronString += '* ';
+            
+        //Cron Month
+        cronString += '* ';
+            
+        //Cron Day of Week
+        cronString += notifySchedule.notifyOn.join(',');
+
+        //console.log(cronString);
+
+        return cronString;
+    }
 }
 
 class OneBusAwayClient {
