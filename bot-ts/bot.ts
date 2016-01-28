@@ -322,17 +322,33 @@ class OneBotAwayBot {
     
     private _getArrivalTimeString(arrival: BusArrival): string {
         if (arrival.predicted.getTime() === 0) {
-            return this._convertHoursToUserTimezone(arrival.scheduled.getHours()) + ':' + ("0" + arrival.scheduled.getMinutes()).slice(-2); 
+            return this._convertUtcHoursToUserTimezone(arrival.scheduled.getHours()) + ':' + ("0" + arrival.scheduled.getMinutes()).slice(-2); 
         }
-        return this._convertHoursToUserTimezone(arrival.predicted.getHours()) + ':' + ("0" + arrival.predicted.getMinutes()).slice(-2);
+        return this._convertUtcHoursToUserTimezone(arrival.predicted.getHours()) + ':' + ("0" + arrival.predicted.getMinutes()).slice(-2);
     }
     
-    private _convertHoursToUserTimezone(hours: number): number {
+    private _convertUtcHoursToUserTimezone(hours: number): number {
         let offsetInHours = 0
         if (new Date().getTimezoneOffset() === 0) {
             offsetInHours = userUtcOffset / 1000 / 60 / 60; 
         }
-        return (hours + offsetInHours) < 0 ? (hours + offsetInHours + 24) : (hours + offsetInHours);
+        let userHours = (hours + offsetInHours);
+        userHours =  userHours >= 24 ? userHours - 24 : 
+                     userHours < 0 ? userHours + 24 :
+                     userHours;
+        return userHours;
+    }
+    
+    private _convertUserHoursToUtc(hours: number): number {
+        let offsetInHours = 0
+        if (new Date().getTimezoneOffset() === 0) {
+            offsetInHours = userUtcOffset / 1000 / 60 / 60; 
+        }
+        let utcHours = (hours - offsetInHours);
+        utcHours = utcHours >= 24 ? utcHours - 24 : 
+                   utcHours < 0 ? utcHours + 24 :
+                   utcHours;
+        return utcHours;
     }
     
     private _setUpNotificationSchedule() {
@@ -365,11 +381,11 @@ class OneBotAwayBot {
         let cronHour = [];
         let tempHour = notifySchedule.notificationsStartTime.hour;
         while (tempHour < notifySchedule.notificationsEndTime.hour) {
-            cronHour.push(this._convertHoursToUserTimezone(tempHour));
+            cronHour.push(this._convertUserHoursToUtc(tempHour));
             tempHour++;
         }
         if (cronHour.length < 1) {
-            cronHour.push(this._convertHoursToUserTimezone(tempHour));
+            cronHour.push(this._convertUserHoursToUtc(tempHour));
         }
         cronString += cronHour.join(',') + ' ';
             
