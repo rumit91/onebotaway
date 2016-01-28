@@ -13,6 +13,9 @@ nconf.file({ file: './config.json' });
 var ONE_BUS_AWAY_KEY = nconf.get('ONE_BUS_AWAY');
 var SLACK_TOKEN = nconf.get('SLACK_TOKEN');
 
+// Hardcoded utc offset.
+var userUtcOffset = -8 * 60 * 60 * 1000;
+
 interface BusCommandDefinition {
     rules: BusCommandDefinitionRule[];
 }
@@ -109,24 +112,24 @@ class OneBotAwayBot {
     }
     private _scheduledJobs: schedule.Job[] = [];
     private _notificationSchedules: NotificationSchedule[] = [
-        /* */
+        /*
         {
             // Test Schedule
             stop: '1_71334', // Overlake TC - Bay 4
             route: '40_100236', //545
             notificationsStartTime: {
-                hour: 20,
+                hour: 11,
                 //min: 27,
             },
             notificationsEndTime: {
-                hour: 22,
+                hour: 11,
                 //min: 0,
             },
             notifyOn: [1,2,3,4,5],
             minBetweenNotifications: 1,
             travelTimeToStopInMin: 5
         },
-        /**/
+        */
         {
             stop: '1_13460', // Bellevue Ave & E Olive St
             route: '40_100236', //545
@@ -138,7 +141,7 @@ class OneBotAwayBot {
                 hour: 10,
                 //min: 0,
             },
-            notifyOn: [1,2,3,4,5],
+            notifyOn: [1,2,3,4,5], // Mon - Fri
             minBetweenNotifications: 10,
             travelTimeToStopInMin: 5
         },
@@ -153,7 +156,7 @@ class OneBotAwayBot {
                 hour: 20,
                 //min: 0,
             },
-            notifyOn: [1,2,3,4,5],
+            notifyOn: [1,2,3,4,5], // Mon - Fri
             minBetweenNotifications: 15,
             travelTimeToStopInMin: 12
         },
@@ -208,6 +211,23 @@ class OneBotAwayBot {
                 });
             }
         });
+    }
+    
+    private _fitsBusCommandRuleInterval(rule: BusCommandDefinitionRule, dateTime: Date): boolean {
+        // Check if we are at UTC so that we can offset appropriately
+        let offset = 0
+        if (dateTime.getTimezoneOffset() === 0) {
+            offset = userUtcOffset; 
+        }
+        // Subtract the date to get just the time in milliseconds
+        let time = dateTime.getTime() - Date.parse(dateTime.toDateString()) + (offset);
+        // If time is negative we have crossed the day boundary.
+        if (time < 0) {
+            time += (24 * 60 * 60 * 1000); // Add 24 hrs to account for day boundary.
+        }
+        //console.log('Date: ' + dateTime);
+        //console.log('time: ' + time + ' startTime: ' + rule.startTime + ' endTime: ' + rule.endTime);
+        return time > rule.startTime && time < rule.endTime;
     }
     
     private _getBusArrivalsInfo(stop: string, route: string, lookUpSpanInMin: number): Q.Promise<BusArrivalsInfo> {
@@ -270,16 +290,18 @@ class OneBotAwayBot {
     
     private _getArrivalTimeString(arrival: BusArrival): string {
         if (arrival.predicted.getTime() === 0) {
-            return arrival.scheduled.getHours() + ':' + ("0" + arrival.scheduled.getMinutes()).slice(-2); 
+            return this._convertHoursToUserTimezone(arrival.scheduled.getHours()) + ':' + ("0" + arrival.scheduled.getMinutes()).slice(-2); 
         }
-        return arrival.predicted.getHours() + ':' + ("0" + arrival.predicted.getMinutes()).slice(-2);
+        return this._convertHoursToUserTimezone(arrival.predicted.getHours()) + ':' + ("0" + arrival.predicted.getMinutes()).slice(-2);
     }
-
-    private _fitsBusCommandRuleInterval(rule: BusCommandDefinitionRule, dateTime: Date): boolean {
-        //Subtract the date to get just the time in milliseconds
-        let time = dateTime.getTime() - Date.parse(dateTime.toDateString());
-        return time > rule.startTime && time < rule.endTime;
-    }   
+    
+    private _convertHoursToUserTimezone(hours: number): number {
+        let offsetInHours = 0
+        if (new Date().getTimezoneOffset() === 0) {
+            offsetInHours = userUtcOffset / 1000 / 60 / 60; 
+        }
+        return (hours + offsetInHours) < 0 ? (hours + offsetInHours + 24) : (hours + offsetInHours);
+    }
     
     private _setUpNotificationSchedule() {
         _.each(this._notificationSchedules, notifySchedule => {
@@ -311,11 +333,11 @@ class OneBotAwayBot {
         let cronHour = [];
         let tempHour = notifySchedule.notificationsStartTime.hour;
         while (tempHour < notifySchedule.notificationsEndTime.hour) {
-            cronHour.push(tempHour);
+            cronHour.push(this._convertHoursToUserTimezone(tempHour));
             tempHour++;
         }
         if (cronHour.length < 1) {
-            cronHour.push(tempHour);
+            cronHour.push(this._convertHoursToUserTimezone(tempHour));
         }
         cronString += cronHour.join(',') + ' ';
             
