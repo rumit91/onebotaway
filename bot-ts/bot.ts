@@ -201,6 +201,38 @@ class OneBotAwayBot {
         this._controller.hears(['bus'], ['direct_message'], (bot, message) => {
             this._respondToBotCommand(bot, message);
         });
+        
+        this._controller.hears(['schedule'], ['direct_message'], (bot, message) => {
+            _.each(this._notificationSchedules, notifySchedule => {
+               const cronString = this._getCronStringForNotificationSchedule(notifySchedule);
+               const scheduleString = this._getStringForSchedule(notifySchedule);
+               bot.reply(message, scheduleString);
+               bot.reply(message, this._getCronStringForPrinting(cronString));
+               bot.reply(message, ':dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar:');
+            });
+        });
+    }
+    
+    private _getStringForSchedule(notifySchedule: NotificationSchedule): string {
+        let scheduleString = 'Stop: `' +  notifySchedule.stop + '`\n';
+        scheduleString += 'Route: `' + notifySchedule.route + '`\n';
+        scheduleString += 'StartTime: `' + notifySchedule.notificationsStartTime.hour + '`\n';
+        scheduleString += 'EndTime: `' + notifySchedule.notificationsEndTime.hour + '`\n';
+        scheduleString += 'NotifyOn: `' + notifySchedule.notifyOn.join(', ') + '`\n';
+        scheduleString += 'MinBetweenNotifications: `' + notifySchedule.minBetweenNotifications + '`\n';
+        scheduleString += 'TravelTime: `' + notifySchedule.travelTimeToStopInMin + '`';
+        return scheduleString;
+    }
+    
+    private _getCronStringForPrinting(cronString: string): string {
+        let cronSubstrings = cronString.split(' ');
+        let stringForPrinting = 'Sec: `' + cronSubstrings[0] + '`\n';
+        stringForPrinting += 'Min: `' + cronSubstrings[1] + '`\n';
+        stringForPrinting += 'Hour: `' + cronSubstrings[2] + '`\n';
+        stringForPrinting += 'Day of Month: `' + cronSubstrings[3] + '`\n';
+        stringForPrinting += 'Month: `' + cronSubstrings[4] + '`\n';
+        stringForPrinting += 'Day of Week: `' + cronSubstrings[5] + '`\n';
+        return stringForPrinting;        
     }
     
     private _respondToBotCommand(bot, message) {
