@@ -27,10 +27,12 @@ interface BusArrivalsInfo {
     busStopName: string;
     routeName: string;
     lookupSpanInMin: number; // look for arrivals from (now) to (now + X min)
-    arrivals: {
-        predicted: Date;
-        scheduled: Date;
-    }[];
+    arrivals: BusArrival[];
+}
+
+interface BusArrival {
+    predicted: Date;
+    scheduled: Date;
 }
 
 interface NotificationSchedule {
@@ -107,24 +109,24 @@ class OneBotAwayBot {
     }
     private _scheduledJobs: schedule.Job[] = [];
     private _notificationSchedules: NotificationSchedule[] = [
-        /*
+        /* */
         {
             // Test Schedule
-            stop: '1_13460', // Bellevue Ave & E Olive St
+            stop: '1_71334', // Overlake TC - Bay 4
             route: '40_100236', //545
             notificationsStartTime: {
-                hour: 13,
+                hour: 20,
                 //min: 27,
             },
             notificationsEndTime: {
-                hour: 16,
+                hour: 22,
                 //min: 0,
             },
             notifyOn: [1,2,3,4,5],
             minBetweenNotifications: 1,
             travelTimeToStopInMin: 5
         },
-        */
+        /**/
         {
             stop: '1_13460', // Bellevue Ave & E Olive St
             route: '40_100236', //545
@@ -234,7 +236,7 @@ class OneBotAwayBot {
         });
     }
 
-    private _getBotCommandReplyString(info: BusArrivalsInfo) {
+    private _getBotCommandReplyString(info: BusArrivalsInfo): string {
         let replyString = ':bus: `' + info.routeName + '` at :busstop:`' + info.busStopName + '`\n';
         if (info.arrivals.length === 0) {
             return replyString + 'No arrivals in the next ' + info.lookupSpanInMin + ' min';
@@ -243,7 +245,7 @@ class OneBotAwayBot {
             _.each(info.arrivals, arrival => {
                 let minAway = Math.floor((arrival.predicted.getTime() - now.getTime()) / (60 * 1000));
                 let offBy = Math.floor((arrival.predicted.getTime() - arrival.scheduled.getTime()) / (60 * 1000));
-                let arrivalTimeString = arrival.predicted.getHours() + ':' + ("0" + arrival.predicted.getMinutes()).slice(-2);
+                let arrivalTimeString = this._getArrivalTimeString(arrival);
                 let offByString = offBy > 0 ? '(' + offBy + ' min late)' :
                                   offBy < 0 ? '(' + (offBy * -1) + ' min early)' :
                                   '(on time)';
@@ -256,11 +258,14 @@ class OneBotAwayBot {
         }
         return replyString;
     }
+    
+    private _getArrivalTimeString(arrival: BusArrival): string {
+        return arrival.predicted.getHours() + ':' + ("0" + arrival.predicted.getMinutes()).slice(-2);
+    }
 
     private _fitsBusCommandRuleInterval(rule: BusCommandDefinitionRule, dateTime: Date): boolean {
         //Subtract the date to get just the time in milliseconds
         let time = dateTime.getTime() - Date.parse(dateTime.toDateString());
-        //console.log(time > rule.startTime && time < rule.endTime);
         return time > rule.startTime && time < rule.endTime;
     }   
     
@@ -270,7 +275,7 @@ class OneBotAwayBot {
             this._scheduledJobs.push(schedule.scheduleJob(cronString, () => {
                 this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100).then(info => {
                      this._bot.say({
-                        text: this._getBotCommandReplyString(info),
+                        text: this._getNotificationString(info, notifySchedule),
                         channel: 'D0KCKR12A'
                      });
                 });
@@ -314,6 +319,34 @@ class OneBotAwayBot {
         //console.log(cronString);
 
         return cronString;
+    }
+    
+    private _getNotificationString(info: BusArrivalsInfo, notifySchedule: NotificationSchedule): string {
+        let notificationStringContainer = ['Consider catching the :bus:'];
+        let noArrivalsString = 'No *' + info.routeName + '* arrivals in the next *' + info.lookupSpanInMin + ' min* :scream:\n:confused: Good luck...'; 
+        if (info.arrivals.length === 0) {
+            return noArrivalsString;
+        } else {
+            let now = new Date();
+            _.each(info.arrivals, arrival => {
+                let arrivalTimeString = this._getArrivalTimeString(arrival);
+                let needToLeaveInMin = this._getMinToLeaveIn(arrival, notifySchedule.travelTimeToStopInMin);
+                if (needToLeaveInMin > 1) {
+                    notificationStringContainer.push(':runner: in *' + needToLeaveInMin + ' min* to catch :bus: `' 
+                        + info.routeName + '` at ' + arrivalTimeString);
+                } 
+            });
+        }
+        if (notificationStringContainer.length === 1) {
+            return noArrivalsString;
+        }
+        return notificationStringContainer.join('\n');
+    }
+    
+    private _getMinToLeaveIn(arrival: BusArrival, travelTimeToStopInMin: number): number {
+        let travelTimeInMillisec = travelTimeToStopInMin * 60 * 1000;
+        let timeBeforeLeavingInMillisec = arrival.predicted.getTime() - travelTimeInMillisec - (new Date()).getTime();
+        return Math.floor(timeBeforeLeavingInMillisec / 1000 / 60);
     }
 }
 
