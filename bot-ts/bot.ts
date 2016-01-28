@@ -224,7 +224,9 @@ class OneBotAwayBot {
             let arrivals = (JSON.parse(res[0].body) as OneBusAwayArrivalsAndDepartures).data.entry.arrivalsAndDepartures;
             // Filter out routes we don't care about and busses that have already left
             arrivals = _.filter(arrivals, arrival => {
-                return arrival.routeId === route && arrival.predictedArrivalTime > new Date().getTime();
+                return arrival.routeId === route && 
+                    (arrival.predictedArrivalTime !== 0 ? arrival.predictedArrivalTime > new Date().getTime() 
+                    : arrival.scheduledArrivalTime > new Date().getTime());
             });
             _.each(arrivals, arrival => {
                 info.arrivals.push({
@@ -239,17 +241,20 @@ class OneBotAwayBot {
     private _getBotCommandReplyString(info: BusArrivalsInfo): string {
         let replyString = ':bus: `' + info.routeName + '` at :busstop:`' + info.busStopName + '`\n';
         if (info.arrivals.length === 0) {
-            return replyString + 'No arrivals in the next ' + info.lookupSpanInMin + ' min';
+            return replyString + 'No arrivals in the next ' + info.lookupSpanInMin + ' min :scream:';
         } else {
             let now = new Date();
             _.each(info.arrivals, arrival => {
-                let minAway = Math.floor((arrival.predicted.getTime() - now.getTime()) / (60 * 1000));
-                let offBy = Math.floor((arrival.predicted.getTime() - arrival.scheduled.getTime()) / (60 * 1000));
+                let arrivalTime = arrival.predicted.getTime() === 0 ? arrival.scheduled : arrival.predicted;
+                let minAway = Math.floor((arrivalTime.getTime() - now.getTime()) / (60 * 1000));
+                let offBy = Math.floor((arrivalTime.getTime() - arrival.scheduled.getTime()) / (60 * 1000));
                 let arrivalTimeString = this._getArrivalTimeString(arrival);
-                let offByString = offBy > 0 ? '(' + offBy + ' min late)' :
+                let offByString = arrival.predicted.getTime() === 0 ? '(scheduled)' :
+                                  offBy > 0 ? '(' + offBy + ' min late)' :
                                   offBy < 0 ? '(' + (offBy * -1) + ' min early)' :
                                   '(on time)';
-                let emoji = offBy > 0 ? ':red_circle:' :
+                let emoji = arrival.predicted.getTime() === 0 ? ':black_circle:' :
+                            offBy > 0 ? ':red_circle:' :
                             offBy < 0 ? ':large_blue_circle:' :
                             ':white_circle:';
                 
@@ -260,6 +265,9 @@ class OneBotAwayBot {
     }
     
     private _getArrivalTimeString(arrival: BusArrival): string {
+        if (arrival.predicted.getTime() === 0) {
+            return arrival.scheduled.getHours() + ':' + ("0" + arrival.scheduled.getMinutes()).slice(-2); 
+        }
         return arrival.predicted.getHours() + ':' + ("0" + arrival.predicted.getMinutes()).slice(-2);
     }
 
@@ -333,7 +341,7 @@ class OneBotAwayBot {
                 let needToLeaveInMin = this._getMinToLeaveIn(arrival, notifySchedule.travelTimeToStopInMin);
                 if (needToLeaveInMin > 1) {
                     notificationStringContainer.push(':runner: in *' + needToLeaveInMin + ' min* to catch :bus: `' 
-                        + info.routeName + '` at ' + arrivalTimeString);
+                        + info.routeName + '` at ' + arrivalTimeString + (arrival.predicted.getTime() === 0 ? ' (scheduled)' : ''));
                 } 
             });
         }
@@ -344,8 +352,9 @@ class OneBotAwayBot {
     }
     
     private _getMinToLeaveIn(arrival: BusArrival, travelTimeToStopInMin: number): number {
+        let arrivalTime = arrival.predicted.getTime() === 0 ? arrival.scheduled : arrival.predicted;
         let travelTimeInMillisec = travelTimeToStopInMin * 60 * 1000;
-        let timeBeforeLeavingInMillisec = arrival.predicted.getTime() - travelTimeInMillisec - (new Date()).getTime();
+        let timeBeforeLeavingInMillisec = arrivalTime.getTime() - travelTimeInMillisec - (new Date()).getTime();
         return Math.floor(timeBeforeLeavingInMillisec / 1000 / 60);
     }
 }
