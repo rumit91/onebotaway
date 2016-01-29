@@ -43,11 +43,11 @@ interface NotificationSchedule {
     route: string;
     notificationsStartTime: {
         hour: number;
-        //min: number; // Commenting out for now since it doesn't work well with Chron
+        min: number;
     };
     notificationsEndTime: {
         hour: number;
-        //min: number; // Commenting out for now since it doesn't work well with Chron
+        min: number;
     };
     notifyOn: number[];
     minBetweenNotifications: number;
@@ -111,19 +111,19 @@ class OneBotAwayBot {
         }]
     }
     private _scheduledJobs: schedule.Job[] = [];
-    private _notificationSchedules: NotificationSchedule[] = [
+    private _notificationSchedules: NotificationSchedule[] = [        
         /*
         {
             // Test Schedule
             stop: '1_71334', // Overlake TC - Bay 4
             route: '40_100236', //545
             notificationsStartTime: {
-                hour: 11,
-                //min: 27,
+                hour: 22,
+                min: 42,
             },
             notificationsEndTime: {
-                hour: 11,
-                //min: 0,
+                hour: 24,
+                min: 0,
             },
             notifyOn: [1,2,3,4,5],
             minBetweenNotifications: 1,
@@ -135,11 +135,11 @@ class OneBotAwayBot {
             route: '40_100236', //545
             notificationsStartTime: {
                 hour: 7,
-                //min: 30,
+                min: 30,
             },
             notificationsEndTime: {
                 hour: 10,
-                //min: 0,
+                min: 0,
             },
             notifyOn: [1,2,3,4,5], // Mon - Fri
             minBetweenNotifications: 10,
@@ -150,11 +150,11 @@ class OneBotAwayBot {
             route: '40_100236', //545
             notificationsStartTime: {
                 hour: 17,
-                //min: 30,
+                min: 30,
             },
             notificationsEndTime: {
                 hour: 20,
-                //min: 0,
+                min: 0,
             },
             notifyOn: [1,2,3,4,5], // Mon - Fri
             minBetweenNotifications: 15,
@@ -360,14 +360,59 @@ class OneBotAwayBot {
         _.each(this._notificationSchedules, notifySchedule => {
             const cronString = this._getCronStringForNotificationSchedule(notifySchedule);
             this._scheduledJobs.push(schedule.scheduleJob(cronString, () => {
-                this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100).then(info => {
-                     this._bot.say({
-                        text: this._getNotificationString(info, notifySchedule),
-                        channel: 'D0KCKR12A'
-                     });
-                });
+                if (this._jobShouldRun(notifySchedule)) {
+                    this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100).then(info => {
+                        this._bot.say({
+                            text: this._getNotificationString(info, notifySchedule),
+                            channel: 'D0KCKR12A'
+                        });
+                    });
+                }
             }));
         });
+    }
+    
+    private _jobShouldRun(notifySchedule: NotificationSchedule): boolean {
+        return this._timeIsWithinSchedule(notifySchedule) && this._dayOfWeekIsWithinSchedule(notifySchedule);    
+    }
+    
+    private _timeIsWithinSchedule(notifySchedule: NotificationSchedule): boolean {
+        const startTimeInMillisec = notifySchedule.notificationsStartTime.hour * 60 * 60 * 1000
+            + notifySchedule.notificationsStartTime.min * 60 * 1000;
+        const endTimeInMillisec = notifySchedule.notificationsEndTime.hour * 60 * 60 * 1000
+            + notifySchedule.notificationsEndTime.min * 60 * 1000;
+        
+        const currentDateTime = new Date();
+        const currentDate =  new Date(currentDateTime.getFullYear(), currentDateTime.getMonth(), currentDateTime.getDate());
+        let currentTimeInMillisec = currentDateTime.getTime() - currentDate.getTime();
+        // Check if we need the timezone offset
+        if (currentDateTime.getTimezoneOffset() === 0) {
+            currentTimeInMillisec += userUtcOffset;
+        }
+        const dayInMillisec = 24 * 60 * 60 * 1000;
+        currentTimeInMillisec = currentTimeInMillisec >= dayInMillisec ? currentTimeInMillisec - dayInMillisec : 
+                                currentTimeInMillisec < 0 ? currentTimeInMillisec + dayInMillisec :
+                                currentTimeInMillisec;
+        
+        console.log('start: ' + startTimeInMillisec + '\n' 
+            + 'current: ' + currentTimeInMillisec + '\n' 
+            + 'end: ' + endTimeInMillisec + '\n'
+            + 'in schedule: ' + (currentTimeInMillisec >= startTimeInMillisec && currentTimeInMillisec < endTimeInMillisec));
+        
+        return currentTimeInMillisec >= startTimeInMillisec && currentTimeInMillisec < endTimeInMillisec;
+    }
+    
+    private _dayOfWeekIsWithinSchedule(notifySchedule: NotificationSchedule): boolean {
+        let currentTimestamp = new Date().getTime();
+        if (new Date().getTimezoneOffset() === 0) {
+            currentTimestamp += userUtcOffset;
+        }
+        let currentDayOfWeek = new Date(currentTimestamp).getDay();
+        
+        console.log('current DayOfWeek: ' + currentDayOfWeek + '\n' 
+            + 'in schedule: ' + _.includes(notifySchedule.notifyOn, currentDayOfWeek));
+        
+        return _.includes(notifySchedule.notifyOn, currentDayOfWeek);
     }
     
     private _getCronStringForNotificationSchedule(notifySchedule: NotificationSchedule): string {
@@ -401,7 +446,7 @@ class OneBotAwayBot {
         cronString += '* ';
             
         //Cron Day of Week
-        cronString += notifySchedule.notifyOn.join(',');
+        cronString += '* '
 
         //console.log(cronString);
 
