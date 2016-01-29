@@ -301,23 +301,28 @@ class OneBotAwayBot {
         } else {
             let now = new Date();
             _.each(info.arrivals, arrival => {
-                let arrivalTime = arrival.predicted.getTime() === 0 ? arrival.scheduled : arrival.predicted;
-                let minAway = Math.floor((arrivalTime.getTime() - now.getTime()) / (60 * 1000));
-                let offBy = Math.floor((arrivalTime.getTime() - arrival.scheduled.getTime()) / (60 * 1000));
-                let arrivalTimeString = this._getArrivalTimeString(arrival);
-                let offByString = arrival.predicted.getTime() === 0 ? '(scheduled)' :
-                                  offBy > 0 ? '(' + offBy + ' min late)' :
-                                  offBy < 0 ? '(' + (offBy * -1) + ' min early)' :
-                                  '(on time)';
-                let emoji = arrival.predicted.getTime() === 0 ? ':black_circle:' :
-                            offBy > 0 ? ':red_circle:' :
-                            offBy < 0 ? ':large_blue_circle:' :
-                            ':white_circle:';
+                const arrivalTime = arrival.predicted.getTime() === 0 ? arrival.scheduled : arrival.predicted;
+                const minAway = Math.floor((arrivalTime.getTime() - now.getTime()) / (60 * 1000));
+                const offByString = this._getOffByStatusString(arrival);
+                const arrivalTimeString = this._getArrivalTimeString(arrival);
                 
-                replyString += emoji + ' *' + minAway + ' min away* ' + offByString + ' - ' + arrivalTimeString + '\n';
+                replyString += '*' + minAway + ' min away* ' + offByString + ' - ' + arrivalTimeString + '\n';
             });
         }
         return replyString;
+    }
+    
+    private _getOffByStatusString(arrival: BusArrival): string {
+        const arrivalTime = arrival.predicted.getTime() === 0 ? arrival.scheduled : arrival.predicted;
+        const offBy = Math.floor((arrivalTime.getTime() - arrival.scheduled.getTime()) / (60 * 1000));
+        const statusEmoji = arrival.predicted.getTime() === 0 ? ':black_circle:' :
+                          offBy > 0 ? ':red_circle:' :
+                          offBy < 0 ? ':large_blue_circle:' :
+                          ':white_circle:';
+        return arrival.predicted.getTime() === 0 ? '(' + statusEmoji + 'scheduled)' :
+               offBy > 0 ? '(' + statusEmoji + offBy + ' min late)' :
+               offBy < 0 ? '(' + statusEmoji + (offBy * -1) + ' min early)' :
+               '(' + statusEmoji + ' on time)';
     }
     
     private _getArrivalTimeString(arrival: BusArrival): string {
@@ -404,7 +409,7 @@ class OneBotAwayBot {
     }
     
     private _getNotificationString(info: BusArrivalsInfo, notifySchedule: NotificationSchedule): string {
-        let notificationStringContainer = ['Consider catching the :bus:'];
+        let notificationStringContainer = ['Catching the :bus: ' + info.routeName + '?'];
         let noArrivalsString = 'No *' + info.routeName + '* arrivals in the next *' + info.lookupSpanInMin + ' min* :scream:\n:confused: Good luck...'; 
         if (info.arrivals.length === 0) {
             return noArrivalsString;
@@ -414,8 +419,11 @@ class OneBotAwayBot {
                 let arrivalTimeString = this._getArrivalTimeString(arrival);
                 let needToLeaveInMin = this._getMinToLeaveIn(arrival, notifySchedule.travelTimeToStopInMin);
                 if (needToLeaveInMin > 1) {
-                    notificationStringContainer.push(':runner: in *' + needToLeaveInMin + ' min* to catch :bus: `' 
-                        + info.routeName + '` at ' + arrivalTimeString + (arrival.predicted.getTime() === 0 ? ' (scheduled)' : ''));
+                    const arrivalTime = arrival.predicted.getTime() === 0 ? arrival.scheduled : arrival.predicted;
+                    const offByString = this._getOffByStatusString(arrival);
+                    
+                    notificationStringContainer.push(':runner: in *' + needToLeaveInMin + ' min* - ' 
+                        + arrivalTimeString + ' ' + offByString);
                 } 
             });
         }
