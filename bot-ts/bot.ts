@@ -267,7 +267,6 @@ class OneBotAwayBot {
                     bot.reply(message, 'Ok I won\'t send you anymore updates about the :bus: `' 
                         + info.routeName + '` at :busstop: `' + info.busStopName + '` for the rest of the day.');
                     notifySchedule.skipOn.push(this._getCurrentUserDate());
-                    bot.reply(message, '' + notifySchedule.skipOn);
                 });
             }
         });
@@ -457,10 +456,7 @@ class OneBotAwayBot {
         });
         
         if (shouldSkip) {
-            this._bot.say({
-                text: 'Skipping schedule',
-                channel: 'D0KCKR12A'
-            });
+            console.log('Skipping Schedule');
         }
         
         return shouldSkip;
