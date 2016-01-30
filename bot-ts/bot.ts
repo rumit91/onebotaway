@@ -93,7 +93,6 @@ class OneBotAwayBot {
     private _oneBusAway: OneBusAwayClient;
     private _controller;
     private _bot;
-    private _interval;
     private _busCommandDefinition: BusCommandDefinition = {
         rules: [{
             // home stop
@@ -190,12 +189,6 @@ class OneBotAwayBot {
     private _setUpListeningCommands() {
         this._controller.hears(['hi'], ['direct_message'], (bot, message) => {
             bot.reply(message, 'Hi! I\'m a bus bot.');
-        });
-        
-        this._controller.hears(['nvm'], ['direct_message'], (bot, message) => {
-            if (this._interval) {
-                clearInterval(this._interval);
-            }
         });
 
         this._controller.hears(['bus'], ['direct_message'], (bot, message) => {
