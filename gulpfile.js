@@ -7,7 +7,7 @@ var gulp = require('gulp'),
 var allTypescript = './bot-ts/**/*.ts'; 
 var allTypings = './typings/**/*.ts';
 var jsOutput = './bot-js/';
-var deployOutput = './deploy/';
+var deployOutput = '../onebotaway-deploy/';
 
 gulp.task('ts-lint', function () {
   return gulp.src(allTypescript).pipe(tslint()).pipe(tslint.report('prose'));
