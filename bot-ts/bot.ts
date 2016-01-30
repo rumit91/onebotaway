@@ -250,10 +250,10 @@ class OneBotAwayBot {
         } else {
             bot.reply(message, 'Godspeed! I\'ll keep you posted with arrival times.');
             this._runningToBus = true;
-            _.each(this._busCommandDefinition.rules, rule => {
-                if (this._fitsBusCommandRuleInterval(rule, new Date())) {                
-                    this._getBusArrivalsInfo(rule.stop, rule.route, 100, rule.travelTimeToStopInMin).then(info => {
-                        this._startRunCronJob(rule, info.arrivals[0].vehicleId);
+            _.each(this._notificationSchedules, notifySchedule => {
+                if (this._fitsNotificationScheduleInterval(notifySchedule, new Date())) {                
+                    this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100, notifySchedule.travelTimeToStopInMin).then(info => {
+                        this._startRunCronJob(notifySchedule, info.arrivals[0].vehicleId);
                     });
                 }
             });
@@ -585,10 +585,10 @@ class OneBotAwayBot {
         return Math.floor(timeBeforeLeavingInMillisec / 1000 / 60);
     }
     
-    private _startRunCronJob(rule: BusCommandDefinitionRule, runningToVehicleId: string) {
+    private _startRunCronJob(notifySchedule: NotificationSchedule, runningToVehicleId: string) {
         const cronString = '0,30 * * * * *'; // Run every 30 sec;
         this._runCommandCronJob = schedule.scheduleJob(cronString, () => {
-            this._getBusArrivalsInfo(rule.stop, rule.route, 30).then(info => {
+            this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 30).then(info => {
                 if (info.arrivals[0].vehicleId === runningToVehicleId) {
                     this._bot.say({
                         text: this._getBotCommandReplyString(info),
