@@ -24,6 +24,7 @@ interface BusCommandDefinitionRule {
     endTime: number;
     stop: string;
     route: string;
+    travelTimeToStopInMin: number;
 }
 
 interface BusArrivalsInfo {
@@ -36,6 +37,7 @@ interface BusArrivalsInfo {
 interface BusArrival {
     predicted: Date;
     scheduled: Date;
+    vehicleId: string;
 }
 
 interface NotificationSchedule {
@@ -84,6 +86,7 @@ interface OneBusAwayArrivalsAndDepartures {
                 routeId: string;
                 scheduledArrivalTime: number;
                 predictedArrivalTime: number;
+                vehicleId: string;
             }[];
         }
     }
@@ -93,42 +96,44 @@ class OneBotAwayBot {
     private _oneBusAway: OneBusAwayClient;
     private _controller;
     private _bot;
+    private _runningToBus = false;
+    private _runCommandCronJob: schedule.Job;
     private _busCommandDefinition: BusCommandDefinition = {
         rules: [{
             // home stop
             startTime: 0, // midnight
             endTime: 39600000, // 11am
             stop: '1_13460', // Bellevue Ave & E Olive St
-            route: '40_100236' //545
+            route: '40_100236', //545
+            travelTimeToStopInMin: 5
         },
         {
             // work stop
             startTime: 39601000, // 11:00:01 AM
             endTime: 86399000, // 11:59:59 PM
             stop: '1_71334', // Overlake TC - Bay 4
-            route: '40_100236' //545
+            route: '40_100236', //545
+            travelTimeToStopInMin: 12
         }]
     }
     private _scheduledJobs: schedule.Job[] = [];
     private _notificationSchedules: NotificationSchedule[] = [        
-        /*
         {
             // Test Schedule
             stop: '1_71334', // Overlake TC - Bay 4
             route: '40_100236', //545
             notificationsStartTime: {
-                hour: 22,
-                min: 42,
+                hour: 20,
+                min: 20,
             },
             notificationsEndTime: {
-                hour: 24,
+                hour: 23,
                 min: 0,
             },
             notifyOn: [1,2,3,4,5],
             minBetweenNotifications: 1,
-            travelTimeToStopInMin: 5
+            travelTimeToStopInMin: 12
         },
-        */
         {
             stop: '1_13460', // Bellevue Ave & E Olive St
             route: '40_100236', //545
@@ -158,7 +163,7 @@ class OneBotAwayBot {
             notifyOn: [1,2,3,4,5], // Mon - Fri
             minBetweenNotifications: 15,
             travelTimeToStopInMin: 12
-        },
+        }
     ]
 
     constructor(oneBusAway: OneBusAwayClient, slackToken: string) {
@@ -195,6 +200,10 @@ class OneBotAwayBot {
             this._respondToBotCommand(bot, message);
         });
         
+        this._controller.hears(['run'], ['direct_message'], (bot, message) => {
+           this._respondToRunCommand(bot, message); 
+        });
+        
         this._controller.hears(['schedule'], ['direct_message'], (bot, message) => {
             _.each(this._notificationSchedules, notifySchedule => {
                const cronString = this._getCronStringForNotificationSchedule(notifySchedule);
@@ -227,6 +236,22 @@ class OneBotAwayBot {
         return stringForPrinting;        
     }
     
+    private _respondToRunCommand(bot, message) {
+        if(this._runningToBus) {
+            bot.reply(message, 'Already running to bus!');
+        } else {
+            bot.reply(message, 'Godspeed! I\'ll keep you posted with arrival times.');
+            this._runningToBus = true;
+            _.each(this._busCommandDefinition.rules, rule => {
+                if (this._fitsBusCommandRuleInterval(rule, new Date())) {                
+                    this._getBusArrivalsInfo(rule.stop, rule.route, 100, rule.travelTimeToStopInMin).then(info => {
+                        this._startRunCronJob(rule, info.arrivals[0].vehicleId);
+                    });
+                }
+            });
+        }
+    }
+    
     private _respondToBotCommand(bot, message) {
         _.each(this._busCommandDefinition.rules, rule => {
             if (this._fitsBusCommandRuleInterval(rule, new Date())) {                
@@ -254,7 +279,7 @@ class OneBotAwayBot {
         return time > rule.startTime && time < rule.endTime;
     }
     
-    private _getBusArrivalsInfo(stop: string, route: string, lookUpSpanInMin: number): Q.Promise<BusArrivalsInfo> {
+    private _getBusArrivalsInfo(stop: string, route: string, lookUpSpanInMin: number, travelTimeToStop = 0): Q.Promise<BusArrivalsInfo> {
         let info: BusArrivalsInfo = {
             busStopName: '',
             routeName: '',
@@ -270,16 +295,18 @@ class OneBotAwayBot {
             return this._oneBusAway.getArrivalInfo(stop, lookUpSpanInMin);
         }).then<any>(res => {
             let arrivals = (JSON.parse(res[0].body) as OneBusAwayArrivalsAndDepartures).data.entry.arrivalsAndDepartures;
+            const travelTimeInMillisec = travelTimeToStop * 60 * 1000;
             // Filter out routes we don't care about and busses that have already left
             arrivals = _.filter(arrivals, arrival => {
                 return arrival.routeId === route && 
-                    (arrival.predictedArrivalTime !== 0 ? arrival.predictedArrivalTime > new Date().getTime() 
-                    : arrival.scheduledArrivalTime > new Date().getTime());
+                    (arrival.predictedArrivalTime !== 0 ? arrival.predictedArrivalTime - travelTimeInMillisec > new Date().getTime() 
+                    : arrival.scheduledArrivalTime - travelTimeInMillisec > new Date().getTime());
             });
             _.each(arrivals, arrival => {
                 info.arrivals.push({
                     predicted: new Date(arrival.predictedArrivalTime),
-                    scheduled: new Date(arrival.scheduledArrivalTime)
+                    scheduled: new Date(arrival.scheduledArrivalTime),
+                    vehicleId: arrival.vehicleId
                 });
             });
             return info;
@@ -365,7 +392,9 @@ class OneBotAwayBot {
     }
     
     private _jobShouldRun(notifySchedule: NotificationSchedule): boolean {
-        return this._timeIsWithinSchedule(notifySchedule) && this._dayOfWeekIsWithinSchedule(notifySchedule);    
+        return !this._runningToBus 
+               && this._timeIsWithinSchedule(notifySchedule) 
+               && this._dayOfWeekIsWithinSchedule(notifySchedule);    
     }
     
     private _timeIsWithinSchedule(notifySchedule: NotificationSchedule): boolean {
@@ -475,6 +504,33 @@ class OneBotAwayBot {
         let travelTimeInMillisec = travelTimeToStopInMin * 60 * 1000;
         let timeBeforeLeavingInMillisec = arrivalTime.getTime() - travelTimeInMillisec - (new Date()).getTime();
         return Math.floor(timeBeforeLeavingInMillisec / 1000 / 60);
+    }
+    
+    private _startRunCronJob(rule: BusCommandDefinitionRule, runningToVehicleId: string) {
+        const cronString = '0,30 * * * * *'; // Run every 30 sec;
+        this._runCommandCronJob = schedule.scheduleJob(cronString, () => {
+            this._getBusArrivalsInfo(rule.stop, rule.route, 30).then(info => {
+                if (info.arrivals[0].vehicleId === runningToVehicleId) {
+                    this._bot.say({
+                        text: this._getBotCommandReplyString(info),
+                        channel: 'D0KCKR12A'
+                    });
+                } else {
+                    this._bot.say({
+                        text: 'I hope you made your bus!',
+                        channel: 'D0KCKR12A'
+                    });
+                    this._runningToBus = false;
+                    this._cancelRunCommandCronJob();
+                }
+            });
+        });
+    }
+    
+    private _cancelRunCommandCronJob() {
+        if (this._runCommandCronJob) {
+            this._runCommandCronJob.cancel();
+        }
     }
 }
 
