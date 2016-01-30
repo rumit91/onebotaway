@@ -54,6 +54,7 @@ interface NotificationSchedule {
     notifyOn: number[];
     minBetweenNotifications: number;
     travelTimeToStopInMin: number;
+    skipOn: Date[];
 }
 
 interface OneBusAwayStop {
@@ -132,7 +133,8 @@ class OneBotAwayBot {
             },
             notifyOn: [1,2,3,4,5],
             minBetweenNotifications: 1,
-            travelTimeToStopInMin: 12
+            travelTimeToStopInMin: 12,
+            skipOn: []
         },
         {
             stop: '1_13460', // Bellevue Ave & E Olive St
@@ -147,7 +149,8 @@ class OneBotAwayBot {
             },
             notifyOn: [1,2,3,4,5], // Mon - Fri
             minBetweenNotifications: 10,
-            travelTimeToStopInMin: 5
+            travelTimeToStopInMin: 5,
+            skipOn: []
         },
         {
             stop: '1_71334', // Overlake TC - Bay 4
@@ -162,7 +165,8 @@ class OneBotAwayBot {
             },
             notifyOn: [1,2,3,4,5], // Mon - Fri
             minBetweenNotifications: 15,
-            travelTimeToStopInMin: 12
+            travelTimeToStopInMin: 12,
+            skipOn: []
         }
     ]
 
@@ -202,6 +206,10 @@ class OneBotAwayBot {
         
         this._controller.hears(['run'], ['direct_message'], (bot, message) => {
            this._respondToRunCommand(bot, message); 
+        });
+        
+        this._controller.hears(['skip'], ['direct_message'], (bot, message) => {
+           this._respondToSkipCommand(bot, message); 
         });
         
         this._controller.hears(['schedule'], ['direct_message'], (bot, message) => {
@@ -252,6 +260,19 @@ class OneBotAwayBot {
         }
     }
     
+    private _respondToSkipCommand(bot, message) {
+        _.each(this._notificationSchedules, notifySchedule => {
+            if (this._fitsNotificationScheduleInterval(notifySchedule, new Date())) {
+                this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 30).then(info => {
+                    bot.reply(message, 'Ok I won\'t send you anymore updates about the :bus: `' 
+                        + info.routeName + '` at :busstop: `' + info.busStopName + '` for the rest of the day.');
+                    notifySchedule.skipOn.push(this._getCurrentUserDate());
+                    bot.reply(message, '' + notifySchedule.skipOn);
+                });
+            }
+        });
+    }
+    
     private _respondToBotCommand(bot, message) {
         _.each(this._busCommandDefinition.rules, rule => {
             if (this._fitsBusCommandRuleInterval(rule, new Date())) {                
@@ -277,6 +298,27 @@ class OneBotAwayBot {
         //console.log('Date: ' + dateTime);
         //console.log('time: ' + time + ' startTime: ' + rule.startTime + ' endTime: ' + rule.endTime);
         return time > rule.startTime && time < rule.endTime;
+    }
+    
+    private _fitsNotificationScheduleInterval(notifySchedule: NotificationSchedule, dateTime: Date): boolean {
+        // Check if we are at UTC so that we can offset appropriately
+        let offset = 0
+        if (dateTime.getTimezoneOffset() === 0) {
+            offset = userUtcOffset; 
+        }
+        // Subtract the date to get just the time in milliseconds
+        let time = dateTime.getTime() - Date.parse(dateTime.toDateString()) + (offset);
+        // If time is negative we have crossed the day boundary.
+        if (time < 0) {
+            time += (24 * 60 * 60 * 1000); // Add 24 hrs to account for day boundary.
+        }
+        
+        const scheduleStartTime = notifySchedule.notificationsStartTime.hour * 60 * 60 * 1000
+            + notifySchedule.notificationsStartTime.min * 60 * 1000;
+        const scheduleEndTime = notifySchedule.notificationsEndTime.hour * 60 * 60 * 1000
+            + notifySchedule.notificationsEndTime.min * 60 * 1000;
+            
+        return time > scheduleStartTime && time < scheduleEndTime;
     }
     
     private _getBusArrivalsInfo(stop: string, route: string, lookUpSpanInMin: number, travelTimeToStop = 0): Q.Promise<BusArrivalsInfo> {
@@ -392,9 +434,46 @@ class OneBotAwayBot {
     }
     
     private _jobShouldRun(notifySchedule: NotificationSchedule): boolean {
-        return !this._runningToBus 
+        return !this._runningToBus
+               && !this._shouldSkipSchedule(notifySchedule)
                && this._timeIsWithinSchedule(notifySchedule) 
                && this._dayOfWeekIsWithinSchedule(notifySchedule);    
+    }
+    
+        private _shouldSkipSchedule(notifySchedule: NotificationSchedule): boolean {
+        let shouldSkip = false;
+        const currentDate = this._getCurrentUserDate();
+        
+        console.log('Current Date: ' + currentDate);
+        console.log('Skip On: ' + notifySchedule.skipOn);
+        
+        shouldSkip = _.filter(notifySchedule.skipOn, skipDate => {
+            return skipDate.getTime() == currentDate.getTime();
+        }).length > 0;
+        
+        // Filter out old skip dates.
+        notifySchedule.skipOn = _.filter(notifySchedule.skipOn, skipDate => {
+            return skipDate.getTime() >= currentDate.getTime();
+        });
+        
+        if (shouldSkip) {
+            this._bot.say({
+                text: 'Skipping schedule',
+                channel: 'D0KCKR12A'
+            });
+        }
+        
+        return shouldSkip;
+    }
+    
+    private _getCurrentUserDate(): Date {
+        const currentDateTime = new Date();
+        let currentDate = currentDateTime;
+        if (currentDateTime.getTimezoneOffset() === 0) {
+            currentDate = new Date(currentDateTime.getTime() + userUtcOffset); 
+        }
+        currentDate.setHours(0, 0, 0, 0);
+        return currentDate;
     }
     
     private _timeIsWithinSchedule(notifySchedule: NotificationSchedule): boolean {
