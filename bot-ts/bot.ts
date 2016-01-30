@@ -206,9 +206,8 @@ class OneBotAwayBot {
             _.each(this._notificationSchedules, notifySchedule => {
                const cronString = this._getCronStringForNotificationSchedule(notifySchedule);
                const scheduleString = this._getStringForSchedule(notifySchedule);
-               bot.reply(message, scheduleString);
-               bot.reply(message, this._getCronStringForPrinting(cronString));
-               bot.reply(message, ':dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar:');
+               const dollarString = ':dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar:'; 
+               bot.reply(message, scheduleString + '\n' + this._getCronStringForPrinting(cronString) + '\n' + dollarString);
             });
         });
     }
