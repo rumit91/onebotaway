@@ -99,6 +99,7 @@ class OneBotAwayBot {
     private _bot;
     private _runningToBus = false;
     private _runCommandCronJob: schedule.Job;
+    private _runningToVehicleId: string;
     private _busCommandDefinition: BusCommandDefinition = {
         rules: [{
             // home stop
@@ -119,7 +120,7 @@ class OneBotAwayBot {
     }
     private _scheduledJobs: schedule.Job[] = [];
     private _notificationSchedules: NotificationSchedule[] = [        
-        {
+        /*{
             // Test Schedule
             stop: '1_71334', // Overlake TC - Bay 4
             route: '40_100236', //545
@@ -135,7 +136,7 @@ class OneBotAwayBot {
             minBetweenNotifications: 1,
             travelTimeToStopInMin: 12,
             skipOn: []
-        },
+        },*/
         {
             stop: '1_13460', // Bellevue Ave & E Olive St
             route: '40_100236', //545
@@ -248,15 +249,28 @@ class OneBotAwayBot {
         if(this._runningToBus) {
             bot.reply(message, 'Already running to bus!');
         } else {
-            bot.reply(message, 'Godspeed! I\'ll keep you posted with arrival times.');
             this._runningToBus = true;
+            let foundSchedule = false;
             _.each(this._notificationSchedules, notifySchedule => {
-                if (this._fitsNotificationScheduleInterval(notifySchedule, new Date())) {                
+                if (this._fitsNotificationScheduleInterval(notifySchedule, new Date())) {
+                    foundSchedule = true;
+                    bot.reply(message, 'Godspeed! I\'ll keep you posted with arrival times.');                
                     this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100, notifySchedule.travelTimeToStopInMin).then(info => {
-                        this._startRunCronJob(notifySchedule, info.arrivals[0].vehicleId);
+                        this._runningToVehicleId = info.arrivals[0].vehicleId;
+                        this._startRunCommandCronJob(notifySchedule);
                     });
                 }
             });
+            
+            if (!foundSchedule) {
+                let bummerString = ':cold_sweat: I can\'t find any notification schedules for the current time,' 
+                                 + ' so I don\'t know what bus you are running to.\n' 
+                                 + 'Sorry I coudn\'t help you. Please check your notification schedules.';
+                this._bot.say({
+                    text: bummerString,
+                    channel: 'D0KCKR12A'
+                });
+            }
         }
     }
     
@@ -581,11 +595,14 @@ class OneBotAwayBot {
         return Math.floor(timeBeforeLeavingInMillisec / 1000 / 60);
     }
     
-    private _startRunCronJob(notifySchedule: NotificationSchedule, runningToVehicleId: string) {
+    private _startRunCommandCronJob(notifySchedule: NotificationSchedule) {
         const cronString = '0,30 * * * * *'; // Run every 30 sec;
         this._runCommandCronJob = schedule.scheduleJob(cronString, () => {
-            this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 30).then(info => {
-                if (info.arrivals[0].vehicleId === runningToVehicleId) {
+            this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100).then(info => {
+                const vehicleIds = _.map(info.arrivals, 'vehicleId');
+                console.log('VehicleIds: ' + vehicleIds);
+                console.log('Running to: ' + this._runningToVehicleId);
+                if (_.includes(vehicleIds, this._runningToVehicleId)) {
                     this._bot.say({
                         text: this._getBotCommandReplyString(info),
                         channel: 'D0KCKR12A'
