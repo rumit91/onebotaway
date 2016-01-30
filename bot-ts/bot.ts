@@ -202,7 +202,7 @@ class OneBotAwayBot {
         });
 
         this._controller.hears(['bus'], ['direct_message'], (bot, message) => {
-            this._respondToBotCommand(bot, message);
+            this._respondToBusCommand(bot, message);
         });
         
         this._controller.hears(['run'], ['direct_message'], (bot, message) => {
@@ -275,8 +275,10 @@ class OneBotAwayBot {
     }
     
     private _respondToSkipCommand(bot, message) {
+        let foundSchedule = false;
         _.each(this._notificationSchedules, notifySchedule => {
             if (this._fitsNotificationScheduleInterval(notifySchedule, new Date())) {
+                foundSchedule = true;
                 this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 30).then(info => {
                     bot.reply(message, 'Ok I won\'t send you anymore updates about the :bus: `' 
                         + info.routeName + '` at :busstop: `' + info.busStopName + '` for the rest of the day.');
@@ -284,9 +286,17 @@ class OneBotAwayBot {
                 });
             }
         });
+        if (!foundSchedule) {
+            let bummerString = 'I can\'t find any notification schedules for the current time,' 
+                                + ' so there\'s nothing to skip.';
+            this._bot.say({
+                text: bummerString,
+                channel: 'D0KCKR12A'
+            });
+        }
     }
     
-    private _respondToBotCommand(bot, message) {
+    private _respondToBusCommand(bot, message) {
         _.each(this._busCommandDefinition.rules, rule => {
             if (this._fitsBusCommandRuleInterval(rule, new Date())) {                
                 this._getBusArrivalsInfo(rule.stop, rule.route, 100).then(info => {
