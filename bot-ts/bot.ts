@@ -2,6 +2,9 @@
 /// <reference path="./custom-typings/botkit.d.ts" />
 
 import Botkit = require('botkit');
+import _ = require('lodash');
+import Q = require('q');
+import schedule = require('node-schedule');
 import OneBusAwayClient = require('./oneBusAwayClient');
 import Models = require('./models');
 import BusCommandDefinition = Models.BusCommandDefinition;
@@ -12,15 +15,6 @@ import NotificationSchedule = Models.NotificationSchedule;
 import OneBusAwayStop = Models.OneBusAwayStop;
 import OneBusAwayRoute = Models.OneBusAwayRoute;
 import OneBusAwayArrivalsAndDepartures = Models.OneBusAwayArrivalsAndDepartures;
-import fs = require('fs');
-import nconf = require('nconf');
-import _ = require('lodash');
-import Q = require('q');
-import schedule = require('node-schedule');
-
-nconf.file({ file: './config.json' });
-var ONE_BUS_AWAY_KEY = nconf.get('ONE_BUS_AWAY');
-var SLACK_TOKEN = nconf.get('SLACK_TOKEN');
 
 // Hardcoded utc offset.
 var userUtcOffset = -8 * 60 * 60 * 1000;
@@ -568,5 +562,4 @@ class OneBotAwayBot {
     }
 }
 
-var bot = new OneBotAwayBot(new OneBusAwayClient(ONE_BUS_AWAY_KEY), SLACK_TOKEN);
-bot.start();
+export = OneBotAwayBot;
