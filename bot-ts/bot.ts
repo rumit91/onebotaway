@@ -24,7 +24,8 @@ class OneBotAwayBot {
     private _controller;
     private _bot;
     private _runningToBus = false;
-    private _runCommandCronJob: schedule.Job;
+    private _runningToStopId: string;
+    private _runningToRouteId: string;
     private _runningToVehicleId: string;
     private _busCommandDefinition: BusCommandDefinition = {
         rules: [{
@@ -137,6 +138,28 @@ class OneBotAwayBot {
             }
         });
     }
+    
+    run() {
+        if (this._runningToBus) {
+            this._getBusArrivalsInfo(this._runningToStopId, this._runningToRouteId, 100).then(info => {
+                const vehicleIds = _.map(info.arrivals, 'vehicleId');
+                console.log('VehicleIds: ' + vehicleIds);
+                console.log('Running to: ' + this._runningToVehicleId);
+                if (_.includes(vehicleIds, this._runningToVehicleId)) {
+                    this._bot.say({
+                        text: this._getBotCommandReplyString(info),
+                        channel: 'D0KCKR12A'
+                    });
+                } else {
+                    this._bot.say({
+                        text: 'I hope you made your bus!',
+                        channel: 'D0KCKR12A'
+                    });
+                    this._runningToBus = false;
+                }
+            });
+        }
+    }
 
     private _setUpListeningCommands() {
         this._controller.hears(['hi'], ['direct_message'], (bot, message) => {
@@ -193,12 +216,13 @@ class OneBotAwayBot {
             this._runningToBus = true;
             let foundSchedule = false;
             _.each(this._notificationSchedules, notifySchedule => {
-                if (this._fitsNotificationScheduleInterval(notifySchedule, new Date())) {
+                if (this._fitsNotificationScheduleInterval(notifySchedule, new Date()) && !foundSchedule) {
                     foundSchedule = true;
+                    this._runningToStopId = notifySchedule.stop;
+                    this._runningToRouteId = notifySchedule.route;
                     bot.reply(message, 'Godspeed! I\'ll keep you posted with arrival times.');                
                     this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100, notifySchedule.travelTimeToStopInMin).then(info => {
                         this._runningToVehicleId = info.arrivals[0].vehicleId;
-                        this._startRunCommandCronJob(notifySchedule);
                     });
                 }
             });
@@ -503,36 +527,6 @@ class OneBotAwayBot {
         let travelTimeInMillisec = travelTimeToStopInMin * 60 * 1000;
         let timeBeforeLeavingInMillisec = arrivalTime.getTime() - travelTimeInMillisec - (new Date()).getTime();
         return Math.floor(timeBeforeLeavingInMillisec / 1000 / 60);
-    }
-    
-    private _startRunCommandCronJob(notifySchedule: NotificationSchedule) {
-        const cronString = '0,30 * * * * *'; // Run every 30 sec;
-        this._runCommandCronJob = schedule.scheduleJob(cronString, () => {
-            this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100).then(info => {
-                const vehicleIds = _.map(info.arrivals, 'vehicleId');
-                console.log('VehicleIds: ' + vehicleIds);
-                console.log('Running to: ' + this._runningToVehicleId);
-                if (_.includes(vehicleIds, this._runningToVehicleId)) {
-                    this._bot.say({
-                        text: this._getBotCommandReplyString(info),
-                        channel: 'D0KCKR12A'
-                    });
-                } else {
-                    this._bot.say({
-                        text: 'I hope you made your bus!',
-                        channel: 'D0KCKR12A'
-                    });
-                    this._runningToBus = false;
-                    this._cancelRunCommandCronJob();
-                }
-            });
-        });
-    }
-    
-    private _cancelRunCommandCronJob() {
-        if (this._runCommandCronJob) {
-            this._runCommandCronJob.cancel();
-        }
     }
 }
 

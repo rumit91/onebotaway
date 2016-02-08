@@ -33,6 +33,11 @@ class WebApp {
             this._bot.notify();
             res.send('Checking notification schedules');
         });
+        
+        this._app.get('/run', (req, res) => {
+            this._bot.run();
+            res.send('Might be running');
+        });
     }
 }
 
