@@ -1,0 +1,17 @@
+{
+  "name": "onebotaway-webjob",
+  "version": "0.0.0",
+  "description": "",
+  "license": "",
+  "repository": "",
+  "author": "",
+  "keywords": [
+    ""
+  ],
+  "dependencies": {
+    "request": "^2.69.0"
+  },
+  "engines": {
+    "node": ">=0.12.0"
+  }
+}
