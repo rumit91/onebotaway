@@ -60,7 +60,7 @@ class OneBotAwayBot {
                 min: 0,
             },
             notifyOn: [1,2,3,4,5],
-            secBetweenNotifications: 60,
+            secBetweenNotifications: 50,
             travelTimeToStopInMin: 12,
             skipOn: []
         },*/
@@ -76,7 +76,7 @@ class OneBotAwayBot {
                 min: 0,
             },
             notifyOn: [1,2,3,4,5], // Mon - Fri
-            secBetweenNotifications: 600,
+            secBetweenNotifications: 550,
             travelTimeToStopInMin: 5,
             skipOn: []
         },
@@ -92,7 +92,7 @@ class OneBotAwayBot {
                 min: 0,
             },
             notifyOn: [1,2,3,4,5], // Mon - Fri
-            secBetweenNotifications: 900,
+            secBetweenNotifications: 850,
             travelTimeToStopInMin: 12,
             skipOn: []
         }
@@ -488,7 +488,7 @@ class OneBotAwayBot {
     
     private _enoughTimePassedSinceLastNotification(notifySchedule: NotificationSchedule): boolean {
         const enoughTime = notifySchedule.lastNotifiedOn 
-            ? (new Date()).getTime() > notifySchedule.lastNotifiedOn.getTime() + (notifySchedule.secBetweenNotifications*1000) 
+            ? (new Date()).getTime() >= notifySchedule.lastNotifiedOn.getTime() + (notifySchedule.secBetweenNotifications*1000) 
             : true;
         console.log('---------------------------------');
         console.log('Last Notified On: ' + notifySchedule.lastNotifiedOn);
