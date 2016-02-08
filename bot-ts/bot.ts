@@ -2,6 +2,15 @@
 /// <reference path="./custom-typings/botkit.d.ts" />
 
 import Botkit = require('botkit');
+import Models = require('./models');
+import BusCommandDefinition = Models.BusCommandDefinition;
+import BusCommandDefinitionRule = Models.BusCommandDefinitionRule;
+import BusArrivalsInfo = Models.BusArrivalsInfo;
+import BusArrival = Models.BusArrival;
+import NotificationSchedule = Models.NotificationSchedule;
+import OneBusAwayStop = Models.OneBusAwayStop;
+import OneBusAwayRoute = Models.OneBusAwayRoute;
+import OneBusAwayArrivalsAndDepartures = Models.OneBusAwayArrivalsAndDepartures;
 import request = require('request');
 import fs = require('fs');
 import nconf = require('nconf');
@@ -15,83 +24,6 @@ var SLACK_TOKEN = nconf.get('SLACK_TOKEN');
 
 // Hardcoded utc offset.
 var userUtcOffset = -8 * 60 * 60 * 1000;
-
-interface BusCommandDefinition {
-    rules: BusCommandDefinitionRule[];
-}
-interface BusCommandDefinitionRule {
-    startTime: number;
-    endTime: number;
-    stop: string;
-    route: string;
-    travelTimeToStopInMin: number;
-}
-
-interface BusArrivalsInfo {
-    busStopName: string;
-    routeName: string;
-    lookupSpanInMin: number; // look for arrivals from (now) to (now + X min)
-    arrivals: BusArrival[];
-}
-
-interface BusArrival {
-    predicted: Date;
-    scheduled: Date;
-    vehicleId: string;
-}
-
-interface NotificationSchedule {
-    stop: string;
-    route: string;
-    notificationsStartTime: {
-        hour: number;
-        min: number;
-    };
-    notificationsEndTime: {
-        hour: number;
-        min: number;
-    };
-    notifyOn: number[];
-    minBetweenNotifications: number;
-    travelTimeToStopInMin: number;
-    skipOn: Date[];
-}
-
-interface OneBusAwayStop {
-    // TODO: Complete this definition
-    data: {
-        entry: {
-            code: string;
-            id: string;
-            name: string;
-        }
-    }
-}
-
-interface OneBusAwayRoute {
-    // TODO: Complete this definition
-    data: {
-        entry: {
-            id: string;
-            longName: string;
-            shortName: string;
-        }
-    }
-}
-
-interface OneBusAwayArrivalsAndDepartures {
-    // TODO: Complete this definition
-    data: {
-        entry: {
-            arrivalsAndDepartures: {
-                routeId: string;
-                scheduledArrivalTime: number;
-                predictedArrivalTime: number;
-                vehicleId: string;
-            }[];
-        }
-    }
-}
 
 class OneBotAwayBot {
     private _oneBusAway: OneBusAwayClient;
