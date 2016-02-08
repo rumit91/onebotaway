@@ -51,7 +51,7 @@ class OneBotAwayBot {
             stop: '1_71334', // Overlake TC - Bay 4
             route: '40_100236', //545
             notificationsStartTime: {
-                hour: 20,
+                hour: 12,
                 min: 20,
             },
             notificationsEndTime: {
@@ -59,7 +59,7 @@ class OneBotAwayBot {
                 min: 0,
             },
             notifyOn: [1,2,3,4,5],
-            minBetweenNotifications: 1,
+            secBetweenNotifications: 60,
             travelTimeToStopInMin: 12,
             skipOn: []
         },*/
@@ -75,7 +75,7 @@ class OneBotAwayBot {
                 min: 0,
             },
             notifyOn: [1,2,3,4,5], // Mon - Fri
-            minBetweenNotifications: 10,
+            secBetweenNotifications: 600,
             travelTimeToStopInMin: 5,
             skipOn: []
         },
@@ -91,7 +91,7 @@ class OneBotAwayBot {
                 min: 0,
             },
             notifyOn: [1,2,3,4,5], // Mon - Fri
-            minBetweenNotifications: 15,
+            secBetweenNotifications: 900,
             travelTimeToStopInMin: 12,
             skipOn: []
         }
@@ -110,7 +110,6 @@ class OneBotAwayBot {
         });
 
         this._setUpListeningCommands();
-        this._setUpNotificationSchedule();
     }
 
     start() {
@@ -118,6 +117,23 @@ class OneBotAwayBot {
         this._bot.startRTM(function(err) {
             if (err) {
                 throw new Error(err);
+            }
+        });
+    }
+    
+    notify() {
+        _.each(this._notificationSchedules, notifySchedule => {
+            if (this._jobShouldRun(notifySchedule)) {
+                console.log('---------------------------------');
+                console.log('Running schedule');
+                console.log(this._getStringForSchedule(notifySchedule));
+                this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100).then(info => {
+                    this._bot.say({
+                        text: this._getNotificationString(info, notifySchedule),
+                        channel: 'D0KCKR12A'
+                    });
+                });
+                notifySchedule.lastNotifiedOn = new Date();
             }
         });
     }
@@ -141,10 +157,9 @@ class OneBotAwayBot {
         
         this._controller.hears(['schedule'], ['direct_message'], (bot, message) => {
             _.each(this._notificationSchedules, notifySchedule => {
-               const cronString = this._getCronStringForNotificationSchedule(notifySchedule);
                const scheduleString = this._getStringForSchedule(notifySchedule);
                const dollarString = ':dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar::dollar:'; 
-               bot.reply(message, scheduleString + '\n' + this._getCronStringForPrinting(cronString) + '\n' + dollarString);
+               bot.reply(message, scheduleString + '\n' + dollarString);
             });
         });
     }
@@ -155,7 +170,7 @@ class OneBotAwayBot {
         scheduleString += 'StartTime: `' + notifySchedule.notificationsStartTime.hour + '`\n';
         scheduleString += 'EndTime: `' + notifySchedule.notificationsEndTime.hour + '`\n';
         scheduleString += 'NotifyOn: `' + notifySchedule.notifyOn.join(', ') + '`\n';
-        scheduleString += 'MinBetweenNotifications: `' + notifySchedule.minBetweenNotifications + '`\n';
+        scheduleString += 'SecBetweenNotifications: `' + notifySchedule.secBetweenNotifications + '`\n';
         scheduleString += 'TravelTime: `' + notifySchedule.travelTimeToStopInMin + '`';
         return scheduleString;
     }
@@ -366,33 +381,18 @@ class OneBotAwayBot {
         return utcHours;
     }
     
-    private _setUpNotificationSchedule() {
-        _.each(this._notificationSchedules, notifySchedule => {
-            const cronString = this._getCronStringForNotificationSchedule(notifySchedule);
-            this._scheduledJobs.push(schedule.scheduleJob(cronString, () => {
-                if (this._jobShouldRun(notifySchedule)) {
-                    this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100).then(info => {
-                        this._bot.say({
-                            text: this._getNotificationString(info, notifySchedule),
-                            channel: 'D0KCKR12A'
-                        });
-                    });
-                }
-            }));
-        });
-    }
-    
     private _jobShouldRun(notifySchedule: NotificationSchedule): boolean {
         return !this._runningToBus
                && !this._shouldSkipSchedule(notifySchedule)
                && this._timeIsWithinSchedule(notifySchedule) 
-               && this._dayOfWeekIsWithinSchedule(notifySchedule);    
+               && this._dayOfWeekIsWithinSchedule(notifySchedule)
+               && this._enoughTimePassedSinceLastNotification(notifySchedule);    
     }
     
-        private _shouldSkipSchedule(notifySchedule: NotificationSchedule): boolean {
+    private _shouldSkipSchedule(notifySchedule: NotificationSchedule): boolean {
         let shouldSkip = false;
         const currentDate = this._getCurrentUserDate();
-        
+        console.log('---------------------------------');
         console.log('Current Date: ' + currentDate);
         console.log('Skip On: ' + notifySchedule.skipOn);
         
@@ -440,6 +440,7 @@ class OneBotAwayBot {
                                 currentTimeInMillisec < 0 ? currentTimeInMillisec + dayInMillisec :
                                 currentTimeInMillisec;
         
+        console.log('---------------------------------');
         console.log('start: ' + startTimeInMillisec + '\n' 
             + 'current: ' + currentTimeInMillisec + '\n' 
             + 'end: ' + endTimeInMillisec + '\n'
@@ -461,42 +462,15 @@ class OneBotAwayBot {
         return _.includes(notifySchedule.notifyOn, currentDayOfWeek);
     }
     
-    private _getCronStringForNotificationSchedule(notifySchedule: NotificationSchedule): string {
-        let cronString = '0 ';
-            
-        // Cron Min
-        let cronMin = [];
-        let tempMin = 0;
-        while (tempMin < 60) {
-            cronMin.push(tempMin);
-            tempMin += notifySchedule.minBetweenNotifications;
-        }
-        cronString += cronMin.join(',') + ' ';
-            
-        // Cron Hour
-        let cronHour = [];
-        let tempHour = notifySchedule.notificationsStartTime.hour;
-        while (tempHour < notifySchedule.notificationsEndTime.hour) {
-            cronHour.push(this._convertUserHoursToUtc(tempHour));
-            tempHour++;
-        }
-        if (cronHour.length < 1) {
-            cronHour.push(this._convertUserHoursToUtc(tempHour));
-        }
-        cronString += cronHour.join(',') + ' ';
-            
-        //Cron Day of Month
-        cronString += '* ';
-            
-        //Cron Month
-        cronString += '* ';
-            
-        //Cron Day of Week
-        cronString += '* '
-
-        //console.log(cronString);
-
-        return cronString;
+    private _enoughTimePassedSinceLastNotification(notifySchedule: NotificationSchedule): boolean {
+        const enoughTime = notifySchedule.lastNotifiedOn 
+            ? (new Date()).getTime() > notifySchedule.lastNotifiedOn.getTime() + (notifySchedule.secBetweenNotifications*1000) 
+            : true;
+        console.log('---------------------------------');
+        console.log('Last Notified On: ' + notifySchedule.lastNotifiedOn);
+        console.log('Sec between notifications: ' + notifySchedule.secBetweenNotifications);
+        console.log('Enough time pass?: ' + enoughTime);
+        return enoughTime;
     }
     
     private _getNotificationString(info: BusArrivalsInfo, notifySchedule: NotificationSchedule): string {

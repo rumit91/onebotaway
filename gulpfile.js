@@ -27,9 +27,6 @@ gulp.task('deploy', ['deploy-compile', 'deploy-move']);
 gulp.task('deploy-compile', function() {
     return gulp.src([allTypescript, allTypings])
     .pipe(ts({module: 'commonjs'})).js
-    .pipe(rename('app.js'))
-    .pipe(replace('nconf.get(\'ONE_BUS_AWAY\')', 'process.env.oneBusAway'))
-    .pipe(replace('nconf.get(\'SLACK_TOKEN\')', 'process.env.slackToken'))
     .pipe(gulp.dest(deployOutput));
 });
 

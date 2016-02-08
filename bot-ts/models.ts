@@ -35,9 +35,10 @@ export interface NotificationSchedule {
         min: number;
     };
     notifyOn: number[];
-    minBetweenNotifications: number;
+    secBetweenNotifications: number;
     travelTimeToStopInMin: number;
     skipOn: Date[];
+    lastNotifiedOn?: Date;
 }
 
 export interface OneBusAwayStop {
