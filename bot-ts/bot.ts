@@ -265,7 +265,12 @@ class OneBotAwayBot {
         _.each(this._busCommandDefinition.rules, rule => {
             if (this._fitsBusCommandRuleInterval(rule, new Date())) {                
                 this._getBusArrivalsInfo(rule.stop, rule.route, 100).then(info => {
-                    bot.reply(message, this._getBotCommandReplyString(info));
+                    let take = 5;
+                    if(parseInt(message.text.substring(4)) > 0) {
+                        take = parseInt(message.text.substring(4));
+                    }
+                    console.log(take);
+                    bot.reply(message, this._getBotCommandReplyString(info, take));
                 });
             }
         });
@@ -343,13 +348,13 @@ class OneBotAwayBot {
         });
     }
 
-    private _getBotCommandReplyString(info: BusArrivalsInfo): string {
+    private _getBotCommandReplyString(info: BusArrivalsInfo, take: number = 5): string {
         let replyString = ':bus: `' + info.routeName + '` at :busstop:`' + info.busStopName + '`\n';
         if (info.arrivals.length === 0) {
             return replyString + 'No arrivals in the next ' + info.lookupSpanInMin + ' min :scream:';
         } else {
             let now = new Date();
-            _.each(info.arrivals, arrival => {
+            _.each(_.take(info.arrivals, take), arrival => {
                 const arrivalTime = arrival.predicted.getTime() === 0 ? arrival.scheduled : arrival.predicted;
                 const minAway = Math.floor((arrivalTime.getTime() - now.getTime()) / (60 * 1000));
                 const offByString = this._getOffByStatusString(arrival);
