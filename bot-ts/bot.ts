@@ -16,13 +16,12 @@ import OneBusAwayStop = Models.OneBusAwayStop;
 import OneBusAwayRoute = Models.OneBusAwayRoute;
 import OneBusAwayArrivalsAndDepartures = Models.OneBusAwayArrivalsAndDepartures;
 
-// Hardcoded utc offset.
-var userUtcOffset = -8 * 60 * 60 * 1000;
-
 class OneBotAwayBot {
     private _oneBusAway: OneBusAwayClient;
     private _controller;
     private _bot;
+    //TODO: Remove hardcoded utc offset. Get from config instead.
+    private _userUtcOffset = -8 * 60 * 60 * 1000;
     private _runningToBus = false;
     private _runningToStopId: string;
     private _runningToRouteId: string;
@@ -280,7 +279,7 @@ class OneBotAwayBot {
         // Check if we are at UTC so that we can offset appropriately
         let offset = 0
         if (dateTime.getTimezoneOffset() === 0) {
-            offset = userUtcOffset; 
+            offset = this._userUtcOffset; 
         }
         // Subtract the date to get just the time in milliseconds
         let time = dateTime.getTime() - Date.parse(dateTime.toDateString()) + (offset);
@@ -297,7 +296,7 @@ class OneBotAwayBot {
         // Check if we are at UTC so that we can offset appropriately
         let offset = 0
         if (dateTime.getTimezoneOffset() === 0) {
-            offset = userUtcOffset; 
+            offset = this._userUtcOffset; 
         }
         // Subtract the date to get just the time in milliseconds
         let time = dateTime.getTime() - Date.parse(dateTime.toDateString()) + (offset);
@@ -389,7 +388,7 @@ class OneBotAwayBot {
     private _convertUtcHoursToUserTimezone(hours: number): number {
         let offsetInHours = 0
         if (new Date().getTimezoneOffset() === 0) {
-            offsetInHours = userUtcOffset / 1000 / 60 / 60; 
+            offsetInHours = this._userUtcOffset / 1000 / 60 / 60; 
         }
         let userHours = (hours + offsetInHours);
         userHours =  userHours >= 24 ? userHours - 24 : 
@@ -401,7 +400,7 @@ class OneBotAwayBot {
     private _convertUserHoursToUtc(hours: number): number {
         let offsetInHours = 0
         if (new Date().getTimezoneOffset() === 0) {
-            offsetInHours = userUtcOffset / 1000 / 60 / 60; 
+            offsetInHours = this._userUtcOffset / 1000 / 60 / 60; 
         }
         let utcHours = (hours - offsetInHours);
         utcHours = utcHours >= 24 ? utcHours - 24 : 
@@ -445,7 +444,7 @@ class OneBotAwayBot {
         const currentDateTime = new Date();
         let currentDate = currentDateTime;
         if (currentDateTime.getTimezoneOffset() === 0) {
-            currentDate = new Date(currentDateTime.getTime() + userUtcOffset); 
+            currentDate = new Date(currentDateTime.getTime() + this._userUtcOffset); 
         }
         currentDate.setHours(0, 0, 0, 0);
         return currentDate;
@@ -462,7 +461,7 @@ class OneBotAwayBot {
         let currentTimeInMillisec = currentDateTime.getTime() - currentDate.getTime();
         // Check if we need the timezone offset
         if (currentDateTime.getTimezoneOffset() === 0) {
-            currentTimeInMillisec += userUtcOffset;
+            currentTimeInMillisec += this._userUtcOffset;
         }
         const dayInMillisec = 24 * 60 * 60 * 1000;
         currentTimeInMillisec = currentTimeInMillisec >= dayInMillisec ? currentTimeInMillisec - dayInMillisec : 
@@ -481,7 +480,7 @@ class OneBotAwayBot {
     private _dayOfWeekIsWithinSchedule(notifySchedule: NotificationSchedule): boolean {
         let currentTimestamp = new Date().getTime();
         if (new Date().getTimezoneOffset() === 0) {
-            currentTimestamp += userUtcOffset;
+            currentTimestamp += this._userUtcOffset;
         }
         let currentDayOfWeek = new Date(currentTimestamp).getDay();
         
