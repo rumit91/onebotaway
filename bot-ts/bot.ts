@@ -215,7 +215,7 @@ class OneBotAwayBot {
             this._runningToBus = true;
             let foundSchedule = false;
             _.each(this._notificationSchedules, notifySchedule => {
-                if (this._fitsNotificationScheduleInterval(notifySchedule, new Date()) && !foundSchedule) {
+                if (this._fitsNotificationScheduleInterval(notifySchedule) && !foundSchedule) {
                     foundSchedule = true;
                     this._runningToStopId = notifySchedule.stop;
                     this._runningToRouteId = notifySchedule.route;
@@ -241,7 +241,7 @@ class OneBotAwayBot {
     private _respondToSkipCommand(bot, message) {
         let foundSchedule = false;
         _.each(this._notificationSchedules, notifySchedule => {
-            if (this._fitsNotificationScheduleInterval(notifySchedule, new Date())) {
+            if (this._fitsNotificationScheduleInterval(notifySchedule)) {
                 foundSchedule = true;
                 this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 30).then(info => {
                     bot.reply(message, 'Ok I won\'t send you anymore updates about the :bus: `' 
@@ -262,27 +262,25 @@ class OneBotAwayBot {
     
     private _respondToBusCommand(bot, message) {
         _.each(this._busCommandDefinition.rules, rule => {
-            if (this._fitsBusCommandRuleInterval(rule, new Date())) {                
+            if (this._fitsBusCommandRuleInterval(rule)) {                
                 this._getBusArrivalsInfo(rule.stop, rule.route, 100).then(info => {
                     let take = 5;
                     if(parseInt(message.text.substring(4)) > 0) {
                         take = parseInt(message.text.substring(4));
                     }
-                    console.log(take);
                     bot.reply(message, this._getBotCommandReplyString(info, take));
                 });
             }
         });
     }
     
-    private _fitsBusCommandRuleInterval(rule: BusCommandDefinitionRule, dateTime: Date): boolean {
+    private _fitsBusCommandRuleInterval(rule: BusCommandDefinitionRule): boolean {
+        const currentDateTime = new Date();
         // Check if we are at UTC so that we can offset appropriately
-        let offset = 0
-        if (dateTime.getTimezoneOffset() === 0) {
-            offset = this._userUtcOffset; 
-        }
+        let offset = this._userUtcOffset - this._getServerUtcOffsetInMs(); 
+        
         // Subtract the date to get just the time in milliseconds
-        let time = dateTime.getTime() - Date.parse(dateTime.toDateString()) + (offset);
+        let time = currentDateTime.getTime() - Date.parse(currentDateTime.toDateString()) + (offset);
         // If time is negative we have crossed the day boundary.
         if (time < 0) {
             time += (24 * 60 * 60 * 1000); // Add 24 hrs to account for day boundary.
@@ -292,14 +290,13 @@ class OneBotAwayBot {
         return time > rule.startTime && time < rule.endTime;
     }
     
-    private _fitsNotificationScheduleInterval(notifySchedule: NotificationSchedule, dateTime: Date): boolean {
+    private _fitsNotificationScheduleInterval(notifySchedule: NotificationSchedule): boolean {
+        const currentDateTime = new Date();
         // Check if we are at UTC so that we can offset appropriately
-        let offset = 0
-        if (dateTime.getTimezoneOffset() === 0) {
-            offset = this._userUtcOffset; 
-        }
+        let offset = this._userUtcOffset - this._getServerUtcOffsetInMs();
+        
         // Subtract the date to get just the time in milliseconds
-        let time = dateTime.getTime() - Date.parse(dateTime.toDateString()) + (offset);
+        let time = currentDateTime.getTime() - Date.parse(currentDateTime.toDateString()) + (offset);
         // If time is negative we have crossed the day boundary.
         if (time < 0) {
             time += (24 * 60 * 60 * 1000); // Add 24 hrs to account for day boundary.
@@ -386,10 +383,7 @@ class OneBotAwayBot {
     }
     
     private _convertUtcHoursToUserTimezone(hours: number): number {
-        let offsetInHours = 0
-        if (new Date().getTimezoneOffset() === 0) {
-            offsetInHours = this._userUtcOffset / 1000 / 60 / 60; 
-        }
+        let offsetInHours = (this._userUtcOffset - this._getServerUtcOffsetInMs()) / 1000 / 60 / 60;
         let userHours = (hours + offsetInHours);
         userHours =  userHours >= 24 ? userHours - 24 : 
                      userHours < 0 ? userHours + 24 :
@@ -398,10 +392,7 @@ class OneBotAwayBot {
     }
     
     private _convertUserHoursToUtc(hours: number): number {
-        let offsetInHours = 0
-        if (new Date().getTimezoneOffset() === 0) {
-            offsetInHours = this._userUtcOffset / 1000 / 60 / 60; 
-        }
+        let offsetInHours = (this._userUtcOffset - this._getServerUtcOffsetInMs()) / 1000 / 60 / 60;
         let utcHours = (hours - offsetInHours);
         utcHours = utcHours >= 24 ? utcHours - 24 : 
                    utcHours < 0 ? utcHours + 24 :
@@ -442,10 +433,7 @@ class OneBotAwayBot {
     
     private _getCurrentUserDate(): Date {
         const currentDateTime = new Date();
-        let currentDate = currentDateTime;
-        if (currentDateTime.getTimezoneOffset() === 0) {
-            currentDate = new Date(currentDateTime.getTime() + this._userUtcOffset); 
-        }
+        let currentDate = new Date(currentDateTime.getTime() + this._userUtcOffset - this._getServerUtcOffsetInMs());  
         currentDate.setHours(0, 0, 0, 0);
         return currentDate;
     }
@@ -458,11 +446,7 @@ class OneBotAwayBot {
         
         const currentDateTime = new Date();
         const currentDate =  new Date(currentDateTime.getFullYear(), currentDateTime.getMonth(), currentDateTime.getDate());
-        let currentTimeInMillisec = currentDateTime.getTime() - currentDate.getTime();
-        // Check if we need the timezone offset
-        if (currentDateTime.getTimezoneOffset() === 0) {
-            currentTimeInMillisec += this._userUtcOffset;
-        }
+        let currentTimeInMillisec = currentDateTime.getTime() - currentDate.getTime() + this._userUtcOffset - this._getServerUtcOffsetInMs();
         const dayInMillisec = 24 * 60 * 60 * 1000;
         currentTimeInMillisec = currentTimeInMillisec >= dayInMillisec ? currentTimeInMillisec - dayInMillisec : 
                                 currentTimeInMillisec < 0 ? currentTimeInMillisec + dayInMillisec :
@@ -478,10 +462,7 @@ class OneBotAwayBot {
     }
     
     private _dayOfWeekIsWithinSchedule(notifySchedule: NotificationSchedule): boolean {
-        let currentTimestamp = new Date().getTime();
-        if (new Date().getTimezoneOffset() === 0) {
-            currentTimestamp += this._userUtcOffset;
-        }
+        let currentTimestamp = new Date().getTime() + this._userUtcOffset - this._getServerUtcOffsetInMs();
         let currentDayOfWeek = new Date(currentTimestamp).getDay();
         
         console.log('current DayOfWeek: ' + currentDayOfWeek + '\n' 
@@ -531,6 +512,10 @@ class OneBotAwayBot {
         let travelTimeInMillisec = travelTimeToStopInMin * 60 * 1000;
         let timeBeforeLeavingInMillisec = arrivalTime.getTime() - travelTimeInMillisec - (new Date()).getTime();
         return Math.floor(timeBeforeLeavingInMillisec / 1000 / 60);
+    }
+    
+    private _getServerUtcOffsetInMs() {
+        return new Date().getTimezoneOffset() * 60 * 1000 * -1;
     }
 }
 
