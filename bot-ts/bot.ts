@@ -129,7 +129,7 @@ class OneBotAwayBot {
                 console.log(this._getStringForSchedule(notifySchedule));
                 this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100).then(info => {
                     this._bot.say({
-                        text: this._getNotificationString(info, notifySchedule),
+                        text: this._getBotCommandReplyString(info),
                         channel: 'D0KCKR12A'
                     });
                 });
