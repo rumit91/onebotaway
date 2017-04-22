@@ -25,7 +25,6 @@ class OneBotAwayBot {
     private _runningToBus = false;
     private _runningToStopId: string;
     private _runningToRouteId: string;
-    private _runningToVehicleId: string;
     private _busCommandDefinition: BusCommandDefinition = {
         rules: [{
             // home stop
@@ -141,21 +140,10 @@ class OneBotAwayBot {
     run() {
         if (this._runningToBus) {
             this._getBusArrivalsInfo(this._runningToStopId, this._runningToRouteId, 100).then(info => {
-                const vehicleIds = _.map(info.arrivals, 'vehicleId');
-                console.log('VehicleIds: ' + vehicleIds);
-                console.log('Running to: ' + this._runningToVehicleId);
-                if (_.includes(vehicleIds, this._runningToVehicleId)) {
-                    this._bot.say({
-                        text: this._getBotCommandReplyString(info),
-                        channel: 'D0KCKR12A'
-                    });
-                } else {
-                    this._bot.say({
-                        text: 'I hope you made your bus!',
-                        channel: 'D0KCKR12A'
-                    });
-                    this._runningToBus = false;
-                }
+                this._bot.say({
+                    text: this._getBotCommandReplyString(info),
+                    channel: 'D0KCKR12A'
+                });
             });
         }
     }
@@ -171,6 +159,10 @@ class OneBotAwayBot {
         
         this._controller.hears(['run'], ['direct_message'], (bot, message) => {
            this._respondToRunCommand(bot, message); 
+        });
+
+        this._controller.hears(['stop'], ['direct_message'], (bot, message) => {
+           this._respondToStopCommand(bot, message); 
         });
         
         this._controller.hears(['skip'], ['direct_message'], (bot, message) => {
@@ -219,14 +211,12 @@ class OneBotAwayBot {
                     foundSchedule = true;
                     this._runningToStopId = notifySchedule.stop;
                     this._runningToRouteId = notifySchedule.route;
-                    bot.reply(message, 'Godspeed! I\'ll keep you posted with arrival times.');                
-                    this._getBusArrivalsInfo(notifySchedule.stop, notifySchedule.route, 100, notifySchedule.travelTimeToStopInMin).then(info => {
-                        this._runningToVehicleId = info.arrivals[0].vehicleId;
-                    });
+                    bot.reply(message, 'Godspeed! I\'ll keep you posted with arrival times.');
                 }
             });
             
             if (!foundSchedule) {
+                this._runningToBus = false;
                 let bummerString = ':cold_sweat: I can\'t find any notification schedules for the current time,' 
                                  + ' so I don\'t know what bus you are running to.\n' 
                                  + 'Sorry I coudn\'t help you. Please check your notification schedules.';
@@ -235,6 +225,15 @@ class OneBotAwayBot {
                     channel: 'D0KCKR12A'
                 });
             }
+        }
+    }
+
+    private _respondToStopCommand(bot, message) {
+        if (this._runningToBus) {
+            this._runningToBus = false;
+            bot.reply(message, 'I hope you made your bus!');
+        } else {
+            bot.reply(message, 'Hmm I don\'t have you as running to a bus.');
         }
     }
     
