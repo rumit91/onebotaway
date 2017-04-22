@@ -23,6 +23,7 @@ class OneBotAwayBot {
     //TODO: Remove hardcoded utc offset. Get from config instead.
     private _userUtcOffset = -8 * 60 * 60 * 1000;
     private _runningToBus = false;
+    private _pauseNotifications = false;
     private _runningToStopId: string;
     private _runningToRouteId: string;
     private _busCommandDefinition: BusCommandDefinition = {
@@ -164,6 +165,14 @@ class OneBotAwayBot {
         this._controller.hears(['stop'], ['direct_message'], (bot, message) => {
            this._respondToStopCommand(bot, message); 
         });
+
+        this._controller.hears(['pause'], ['direct_message'], (bot, message) => {
+           this._respondToPauseCommand(bot, message); 
+        });
+
+        this._controller.hears(['resume'], ['direct_message'], (bot, message) => {
+           this._respondToResumeCommand(bot, message); 
+        });
         
         this._controller.hears(['skip'], ['direct_message'], (bot, message) => {
            this._respondToSkipCommand(bot, message); 
@@ -234,6 +243,25 @@ class OneBotAwayBot {
             bot.reply(message, 'I hope you made your bus!');
         } else {
             bot.reply(message, 'Hmm I don\'t have you as running to a bus.');
+        }
+    }
+
+    private _respondToPauseCommand(bot, message) {
+        if (!this._pauseNotifications) {
+            this._pauseNotifications = true;
+            bot.reply(message, 'Pausing notifications.');
+        } else {
+            bot.reply(message, 'Looks like notifications are already paused.');
+        }
+    }
+
+    
+    private _respondToResumeCommand(bot, message) {
+        if (this._pauseNotifications) {
+            this._pauseNotifications = false;
+            bot.reply(message, 'Resuming notifications.');
+        } else {
+            bot.reply(message, 'Looks like notifications are already active.');
         }
     }
     
@@ -401,6 +429,7 @@ class OneBotAwayBot {
     
     private _jobShouldRun(notifySchedule: NotificationSchedule): boolean {
         return !this._runningToBus
+               && !this._pauseNotifications
                && !this._shouldSkipSchedule(notifySchedule)
                && this._timeIsWithinSchedule(notifySchedule) 
                && this._dayOfWeekIsWithinSchedule(notifySchedule)
